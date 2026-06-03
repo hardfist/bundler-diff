@@ -20,7 +20,6 @@ use turbo_tasks_backend::{
 };
 use turbo_tasks_fs::FileSystem;
 use turbo_unix_path::join_path;
-use turbopack::global_module_ids::get_global_module_id_strategy;
 use turbopack_browser::{BrowserChunkingContext, CurrentChunkMethod};
 use turbopack_cli_utils::issue::{ConsoleUi, LogOptions};
 use turbopack_core::{
@@ -28,6 +27,7 @@ use turbopack_core::{
     chunk::{
         ChunkingConfig, ChunkingContext, ChunkingContextExt, ContentHashing, EvaluatableAsset,
         MangleType, MinifyType, SourceMapsType, availability_info::AvailabilityInfo,
+        chunk_id_strategy::ModuleIdStrategy,
     },
     environment::{BrowserEnvironment, Environment, ExecutionEnvironment, NodeJsEnvironment},
     ident::AssetIdent,
@@ -95,7 +95,7 @@ impl TurbopackBuildBuilder {
                 mangle: Some(MangleType::OptimalSize),
             },
             target: Target::Node,
-            scope_hoist: true,
+            scope_hoist: false,
         }
     }
 
@@ -326,9 +326,7 @@ async fn build_internal(
         .await?;
     module_graph = ModuleGraph::from_graphs(vec![single_graph], Some(binding_usage));
     let module_graph = module_graph.connect();
-    let module_id_strategy = get_global_module_id_strategy(module_graph)
-        .to_resolved()
-        .await?;
+    let module_id_strategy = ModuleIdStrategy::default().resolved_cell();
 
     let chunking_context: Vc<Box<dyn ChunkingContext>> = match target {
         Target::Browser => {
@@ -598,7 +596,7 @@ pub async fn build(args: &BuildArguments) -> Result<()> {
                 mangle: Some(MangleType::OptimalSize),
             }
         })
-        .scope_hoist(!args.no_scope_hoist)
+        .scope_hoist(args.scope_hoist && !args.no_scope_hoist)
         .target(args.common.target.unwrap_or(Target::Node))
         .show_all(args.common.show_all);
 

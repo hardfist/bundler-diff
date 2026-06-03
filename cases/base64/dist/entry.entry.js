@@ -1,4 +1,4 @@
 var R=require("./[turbopack]_runtime.js")("entry.entry.js")
-R.c("src_entry_04hha87.js")
-R.m(63)
-module.exports=R.m(63).exports
+R.c("[root-of-the-server]__1vppy7a._.js")
+R.m("[project]/src/entry.js [client] (ecmascript)")
+module.exports=R.m("[project]/src/entry.js [client] (ecmascript)").exports

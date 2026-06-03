@@ -121,6 +121,10 @@ pub struct BuildArguments {
     #[clap(long)]
     pub no_minify: bool,
 
+    /// Perform scope hoisting.
+    #[clap(long)]
+    pub scope_hoist: bool,
+
     /// Don't perform scope hoisting.
     #[clap(long)]
     pub no_scope_hoist: bool,
