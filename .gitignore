@@ -1,4 +1,3 @@
+node_modules/
 cases/*/.turbopack/
-cases/*/dist/
-cases/*/rspack-dist/
 cases/*/node_modules/

@@ -6,7 +6,16 @@ settings:
 
 importers:
 
-  .:
+  cases/base64:
+    devDependencies:
+      '@rspack/cli':
+        specifier: ^2.0.6
+        version: 2.0.6(@rspack/core@2.0.6)
+      '@rspack/core':
+        specifier: ^2.0.6
+        version: 2.0.6
+
+  cases/basic:
     devDependencies:
       '@rspack/cli':
         specifier: ^2.0.6
