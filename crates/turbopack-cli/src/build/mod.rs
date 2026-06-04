@@ -387,7 +387,6 @@ async fn build_internal(
                                 ..Default::default()
                             },
                         )
-                        .nested_async_availability(true)
                         .module_merging(scope_hoist);
                 }
             }

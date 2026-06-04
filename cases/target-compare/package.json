@@ -1,0 +1,11 @@
+{
+  "name": "target-compare-case",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build:all": "node scripts/build-targets.cjs && node scripts/compare-artifacts.cjs",
+    "build:turbopack": "node scripts/build-targets.cjs",
+    "compare": "node scripts/compare-artifacts.cjs"
+  },
+  "packageManager": "pnpm@10.33.0"
+}
