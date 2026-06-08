@@ -434,9 +434,96 @@ complex/rspack-dist:rspack-dist/entry.js
 
 这和 Turbopack 的 `/ROOT/src` 编译期替换不同。
 
+
 ---
 
-## 15. 总结
+## 15. `__webpack_require__.f` 多 handler 验证：JS + CSS chunk
+
+为了验证“什么时候会注册多个 `__webpack_require__.f.*`”，本 case 额外新增了一个 browser/CSS 专用构建：
+
+- 配置：`rspack.multi-f.config.cjs`
+- 入口：`src/multi-f-entry.js`
+- lazy 模块：`src/styled-feature.js`
+- CSS：`src/styles/styled-feature.css`
+- 输出：`rspack-multi-f-dist/`
+- 验证脚本：`scripts/verify-multiple-f.cjs`
+
+源码关系：
+
+```js
+// multi-f-entry.js
+await import("./styled-feature.js")
+
+// styled-feature.js
+import "./styles/styled-feature.css";
+export const styledFeature = "styled-feature-loaded";
+```
+
+这个构建使用 browser target 和 CSS modules experiment：
+
+```js
+target: "web",
+experiments: { css: true },
+module: {
+  rules: [{ test: /\.css$/, type: "css" }]
+}
+```
+
+构建后会生成：
+
+```text
+rspack-multi-f-dist/runtime.js
+rspack-multi-f-dist/multi-f-entry.js
+rspack-multi-f-dist/src_styled-feature_js.js
+rspack-multi-f-dist/src_styled-feature_js.css
+```
+
+关键验证点在 `rspack-multi-f-dist/runtime.js`：
+
+```js
+__webpack_require__.f.css = (chunkId, promises, fetchPriority) => {
+  // css chunk loading
+};
+
+__webpack_require__.f.j = function (chunkId, promises) {
+  // JSONP chunk loading for javascript
+};
+```
+
+也就是说，同一个 dynamic import chunk `src_styled-feature_js` 需要两个子系统参与 ensure：
+
+```text
+__webpack_require__.e("src_styled-feature_js")
+  -> f.css(...)  加载 src_styled-feature_js.css
+  -> f.j(...)    加载 src_styled-feature_js.js
+  -> Promise.all(promises)
+```
+
+入口产物中 dynamic import 仍然是统一入口：
+
+```js
+const mod = await __webpack_require__.e("src_styled-feature_js")
+  .then(__webpack_require__.bind(__webpack_require__, "./src/styled-feature.js"));
+```
+
+这正是 `__webpack_require__.f` 的设计价值：`e(chunkId)` 不需要知道一个 chunk 关联了 JS、CSS 还是其他资源；它只遍历所有已注册的 handler，并等待它们共同完成。
+
+验证命令：
+
+```bash
+pnpm --dir cases/complex run verify:multi-f
+```
+
+当前验证输出：
+
+```text
+verified __webpack_require__.f handlers: css, j
+verified lazy JS and CSS assets exist
+```
+
+---
+
+## 16. 总结
 
 当前 complex case 下，Rspack runtime 的关键链路是：
 

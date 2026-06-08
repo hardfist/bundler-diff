@@ -3,11 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build:all": "pnpm run build:turbopack && pnpm run build:rspack",
+    "build:all": "pnpm run build:turbopack && pnpm run build:rspack && pnpm run build:rspack:multi-f",
     "build:turbopack": "rm -rf dist && RUSTFLAGS=\"--cfg tokio_unstable -Cdebug-assertions=off\" cargo run --manifest-path ../../crates/turbopack-cli/Cargo.toml -- build --dir . --root . --target node --no-minify --no-sourcemap src/entry.js",
     "build:rspack": "rspack build --config rspack.config.cjs",
     "start:turbopack": "node dist/entry.entry.js",
-    "start:rspack": "node rspack-dist/entry.js"
+    "start:rspack": "node rspack-dist/entry.js",
+    "build:rspack:multi-f": "rspack build --config rspack.multi-f.config.cjs",
+    "verify:multi-f": "pnpm run build:rspack:multi-f && node scripts/verify-multiple-f.cjs"
   },
   "devDependencies": {
     "@rspack/cli": "^2.0.6",

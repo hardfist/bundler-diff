@@ -481,9 +481,66 @@ Rspack:    complex/rspack-dist:rspack-dist/entry.js
 - Rspack runtime modules 更按需，complex case 触发了 async、interop、chunk、binary 等 helper 后才变大；
 - Turbopack Node runtime 当前更像预置完整能力的通用 runtime，basic 和 complex 的 `[turbopack]_runtime.js` 大小基本相同。
 
+
 ---
 
-## 15. API 对照表
+## 15. Rspack 多 `f` handler 实证：JS + CSS
+
+为了验证 `__webpack_require__.f` 的插件式设计，complex case 额外加入了 `rspack.multi-f.config.cjs`。
+
+这个构建不是 Node 可执行 bundle，而是一个 browser target 的 runtime 结构验证：
+
+```text
+src/multi-f-entry.js
+  -> dynamic import("./styled-feature.js")
+       -> styled-feature.js imports styled-feature.css
+```
+
+构建输出中，一个 lazy chunk 同时有 JS 和 CSS：
+
+```text
+rspack-multi-f-dist/src_styled-feature_js.js
+rspack-multi-f-dist/src_styled-feature_js.css
+```
+
+因此 runtime 同时注册两个 chunk loading handler：
+
+```js
+__webpack_require__.f.css = ... // CSS chunk loading
+__webpack_require__.f.j = ...   // JS JSONP chunk loading
+```
+
+这时：
+
+```js
+__webpack_require__.e("src_styled-feature_js")
+```
+
+会统一调度：
+
+```text
+f.css("src_styled-feature_js", promises)
+f.j("src_styled-feature_js", promises)
+Promise.all(promises)
+```
+
+验证命令：
+
+```bash
+pnpm --dir cases/complex run verify:multi-f
+```
+
+验证脚本会断言：
+
+1. `runtime.js` 中存在 `__webpack_require__.f.css`；
+2. `runtime.js` 中存在 `__webpack_require__.f.j`；
+3. lazy JS 和 lazy CSS 资产都已生成。
+
+这说明多个 `f` handler 的典型触发条件就是：**同一个 chunk ensure 需要多个独立资源加载子系统参与**。当前实证是 JS + CSS；Module Federation、WASM、shared consume 等也可以用同样机制挂入 `f`。
+
+---
+
+## 16. API 对照表
 
 | 功能 | Rspack | Turbopack |
 |---|---|---|
@@ -507,7 +564,7 @@ Rspack:    complex/rspack-dist:rspack-dist/entry.js
 
 ---
 
-## 16. 总结
+## 17. 总结
 
 ### Rspack runtime 更像：
 
