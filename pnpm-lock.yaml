@@ -8,7 +8,7 @@ importers:
 
   .: {}
 
-  cases/base64:
+  cases/runtime/base64:
     devDependencies:
       '@rspack/cli':
         specifier: ^2.0.6
@@ -17,13 +17,13 @@ importers:
         specifier: ^2.0.6
         version: 2.0.6
 
-  cases/base64-loader:
+  cases/runtime/base64-loader:
     devDependencies:
       loader-runner:
         specifier: ^4.3.0
         version: 4.3.2
 
-  cases/basic:
+  cases/runtime/basic:
     devDependencies:
       '@rspack/cli':
         specifier: ^2.0.6
@@ -31,8 +31,6 @@ importers:
       '@rspack/core':
         specifier: ^2.0.6
         version: 2.0.6
-
-  cases/target-compare: {}
 
 packages:
 

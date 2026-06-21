@@ -5,7 +5,7 @@ const result = spawnSync(
   [
     "run",
     "--manifest-path",
-    "../../crates/turbopack-cli/Cargo.toml",
+    "../../../crates/turbopack-cli/Cargo.toml",
     "--",
     "build",
     "--dir",
