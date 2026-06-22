@@ -1,5 +1,7 @@
 node_modules/
 target/
 cases/cache/**/dist/
+cases/cache/**/.rspack-cache/
+cases/cache/**/.webpack-cache/
 cases/**/.turbopack/
 cases/**/node_modules/
