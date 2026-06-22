@@ -3,34 +3,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const caseDir = path.resolve(__dirname, "..");
-const repoRoot = path.resolve(caseDir, "../../..");
-const manifestPath = path.join(repoRoot, "crates/turbopack-cli/Cargo.toml");
 
 const bundlers = [
   {
     name: "turbopack",
-    build: {
-      command: "cargo",
-      args: [
-        "run",
-        "--manifest-path",
-        manifestPath,
-        "--",
-        "build",
-        "--dir",
-        ".",
-        "--root",
-        ".",
-        "--target",
-        "node",
-        "--no-minify",
-        "--no-sourcemap",
-        "--persistent-caching",
-        "--cache-dir",
-        ".turbopack/persistent-cache",
-        "src/entry.js",
-      ],
-    },
+    buildScript: "build:turbopack",
     cacheDir: path.join(caseDir, ".turbopack", "persistent-cache"),
     outputDir: path.join(caseDir, "dist"),
     entryPath: path.join(caseDir, "dist", "entry.entry.js"),
@@ -38,20 +15,14 @@ const bundlers = [
   },
   {
     name: "webpack",
-    build: {
-      command: "pnpm",
-      args: ["exec", "webpack", "--config", "webpack.config.cjs"],
-    },
+    buildScript: "build:webpack",
     cacheDir: path.join(caseDir, ".webpack-cache"),
     outputDir: path.join(caseDir, "dist", "webpack"),
     entryPath: path.join(caseDir, "dist", "webpack", "entry.js"),
   },
   {
     name: "rspack",
-    build: {
-      command: "pnpm",
-      args: ["exec", "rspack", "build", "--config", "rspack.config.cjs"],
-    },
+    buildScript: "build:rspack",
     cacheDir: path.join(caseDir, ".rspack-cache"),
     outputDir: path.join(caseDir, "dist", "rspack"),
     entryPath: path.join(caseDir, "dist", "rspack", "entry.js"),
@@ -63,10 +34,6 @@ function run(command, args, label) {
   const result = spawnSync(command, args, {
     cwd: caseDir,
     encoding: "utf8",
-    env: {
-      ...process.env,
-      TURBO_ENGINE_IGNORE_DIRTY: "1",
-    },
   });
 
   process.stdout.write(result.stdout || "");
@@ -119,8 +86,8 @@ function verifyBundler(bundler) {
   fs.rmSync(bundler.outputDir, { force: true, recursive: true });
 
   const firstOutput = run(
-    bundler.build.command,
-    bundler.build.args,
+    "pnpm",
+    ["run", bundler.buildScript],
     `${bundler.name}: first build writes persistent cache`
   );
   expectCacheEnabled(firstOutput, bundler);
@@ -133,8 +100,8 @@ function verifyBundler(bundler) {
 
   fs.rmSync(bundler.outputDir, { force: true, recursive: true });
   const secondOutput = run(
-    bundler.build.command,
-    bundler.build.args,
+    "pnpm",
+    ["run", bundler.buildScript],
     `${bundler.name}: second build reuses persistent cache directory`
   );
   expectCacheEnabled(secondOutput, bundler);
