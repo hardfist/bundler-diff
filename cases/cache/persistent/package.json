@@ -1,0 +1,12 @@
+{
+  "name": "persistent-cache-case",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build:all": "pnpm run test:persistent-cache",
+    "build:turbopack": "TURBO_ENGINE_IGNORE_DIRTY=1 cargo run --manifest-path ../../../crates/turbopack-cli/Cargo.toml -- build --dir . --root . --target node --no-minify --no-sourcemap --persistent-caching --cache-dir .turbopack/persistent-cache src/entry.js",
+    "start": "node dist/entry.entry.js",
+    "test:persistent-cache": "node scripts/expect-persistent-cache.cjs"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

@@ -8,6 +8,8 @@ importers:
 
   .: {}
 
+  cases/cache/persistent: {}
+
   cases/runtime/base64:
     devDependencies:
       '@rspack/cli':

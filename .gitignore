@@ -1,4 +1,5 @@
 node_modules/
 target/
+cases/cache/**/dist/
 cases/**/.turbopack/
 cases/**/node_modules/
