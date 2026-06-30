@@ -8,6 +8,21 @@ importers:
 
   .: {}
 
+  cases/cache/lazy-compilation:
+    devDependencies:
+      '@rspack/cli':
+        specifier: ^2.0.6
+        version: 2.0.6(@rspack/core@2.0.6)
+      '@rspack/core':
+        specifier: ^2.0.6
+        version: 2.0.6
+      webpack:
+        specifier: ^5.107.2
+        version: 5.107.2(webpack-cli@7.0.3)
+      webpack-cli:
+        specifier: ^7.0.3
+        version: 7.0.3(webpack@5.107.2)
+
   cases/cache/persistent:
     devDependencies:
       '@rspack/cli':
