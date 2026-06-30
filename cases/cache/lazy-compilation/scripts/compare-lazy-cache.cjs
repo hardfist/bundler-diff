@@ -190,6 +190,19 @@ function formatModuleNames(moduleNames) {
   return `\n    - ${moduleNames.join("\n    - ")}`;
 }
 
+function formatPhaseSummary(result, phase) {
+  const cold = result.cold[phase.key];
+  const warm = result.warm[phase.key];
+  const listLabel = phase.listLabel || phase.label;
+
+  return [
+    `  ${phase.label} cache hit rate: cold ${formatHitRate(cold.moduleBuildCache)}, warm ${formatHitRate(warm.moduleBuildCache)}`,
+    `  ${phase.label} modules: cold ${cold.modules} (${cold.cachedModules} cached), warm ${warm.modules} (${warm.cachedModules} cached)`,
+    `  cached modules (${listLabel} cold):${formatModuleNames(cold.cachedModuleNames)}`,
+    `  cached modules (${listLabel} warm):${formatModuleNames(warm.cachedModuleNames)}`,
+  ];
+}
+
 function summarizeStats(stats) {
   const json = stats.toJson({
     all: false,
@@ -488,7 +501,11 @@ async function verifyLazyBundler(name, runSession, cacheDir, outputDir) {
   return {
     name,
     mode: "persistent cache + lazy import activation",
-    cacheMetric: "stats.modules.cached in activated compilation",
+    cacheMetric: "stats.modules.cached per compilation",
+    cachePhases: [
+      { key: "initial", label: "initial compilation", listLabel: "initial" },
+      { key: "activated", label: "activated compilation", listLabel: "activated" },
+    ],
     cold,
     warm,
     cacheFiles: warmCacheFiles,
@@ -571,6 +588,7 @@ function verifyTurbopackBuildCache() {
     name: "turbopack",
     mode: "persistent build cache only; this case's top-level CLI has no dev/lazy command",
     cacheMetric: "TurboTasks ModuleAssetContext::process task cache hits",
+    cachePhases: [{ key: "activated", label: "build" }],
     cold: {
       initial: {
         time: 0,
@@ -616,18 +634,13 @@ function verifyTurbopackBuildCache() {
 function printSummary(results) {
   console.log("\n== cache + lazy compilation comparison ==");
   for (const result of results) {
-    const cold = result.cold.activated;
-    const warm = result.warm.activated;
     console.log(
       [
         `${result.name}: ${result.mode}`,
         `  cache files: ${result.cacheFiles}`,
         `  lazy keys: cold ${result.cold.lazyKeys}, warm ${result.warm.lazyKeys}`,
         `  cache metric: ${result.cacheMetric}`,
-        `  module build cache hit rate: cold ${formatHitRate(cold.moduleBuildCache)}, warm ${formatHitRate(warm.moduleBuildCache)}`,
-        `  activated modules: cold ${cold.modules} (${cold.cachedModules} cached), warm ${warm.modules} (${warm.cachedModules} cached)`,
-        `  cached modules (cold):${formatModuleNames(cold.cachedModuleNames)}`,
-        `  cached modules (warm):${formatModuleNames(warm.cachedModuleNames)}`,
+        ...result.cachePhases.flatMap((phase) => formatPhaseSummary(result, phase)),
       ].join("\n")
     );
   }
