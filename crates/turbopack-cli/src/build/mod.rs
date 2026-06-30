@@ -11,7 +11,8 @@ use rustc_hash::FxHashSet;
 use tracing::Instrument;
 use turbo_rcstr::RcStr;
 use turbo_tasks::{
-    Effects, OperationVc, ResolvedVc, TransientInstance, TryJoinIterExt, TurboTasks, Vc,
+    Effects, OperationVc, ResolvedVc, TransientInstance, TryJoinIterExt, TurboTasks,
+    TurboTasksApi, Vc,
     take_effects,
 };
 use turbo_tasks_backend::{
@@ -585,6 +586,10 @@ pub async fn build(args: &BuildArguments) -> Result<()> {
         ))
     };
 
+    if args.common.full_stats {
+        tt.task_statistics().enable();
+    }
+
     let mut builder = TurbopackBuildBuilder::new(tt.clone(), project_dir, root_dir)
         .log_detail(args.common.log_detail)
         .log_level(
@@ -617,6 +622,15 @@ pub async fn build(args: &BuildArguments) -> Result<()> {
     }
 
     builder.build().await?;
+
+    if args.common.full_stats {
+        if let Some(stats) = tt.task_statistics().get() {
+            eprintln!(
+                "TURBOPACK_TASK_CACHE_STATS_JSON:{}",
+                serde_json::to_string(stats.as_ref())?
+            );
+        }
+    }
 
     // Intentionally leak this `Arc`. Otherwise we'll waste time during process exit performing a
     // ton of drop calls.

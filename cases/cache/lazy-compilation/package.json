@@ -5,7 +5,7 @@
   "scripts": {
     "build:all": "pnpm run test:lazy-cache",
     "build:rspack": "rspack build --config rspack.config.cjs",
-    "build:turbopack": "TURBO_ENGINE_IGNORE_DIRTY=1 cargo run --manifest-path ../../../crates/turbopack-cli/Cargo.toml -- build --dir . --root . --target node --no-minify --no-sourcemap --persistent-caching --cache-dir .turbopack/persistent-cache src/entry.js",
+    "build:turbopack": "TURBO_ENGINE_IGNORE_DIRTY=1 cargo run --manifest-path ../../../crates/turbopack-cli/Cargo.toml -- build --dir . --root . --target node --no-minify --no-sourcemap --full-stats --persistent-caching --cache-dir .turbopack/persistent-cache src/entry.js",
     "build:webpack": "webpack --config webpack.config.cjs",
     "start:turbopack": "node dist/entry.entry.js",
     "test:lazy-cache": "node scripts/compare-lazy-cache.cjs"

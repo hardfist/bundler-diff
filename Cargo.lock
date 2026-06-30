@@ -3141,6 +3141,7 @@ dependencies = [
  "dunce",
  "either",
  "rustc-hash",
+ "serde_json",
  "swc_core",
  "tokio",
  "tracing",

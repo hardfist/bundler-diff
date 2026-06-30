@@ -8,6 +8,7 @@ const caseDir = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(caseDir, "../../..");
 const expectedBaseline = "lazy compilation cache case: 3 eagerly loaded records, weight 24";
 const expectedLazyReport = "lazy chunk report: 4 lazy metrics, checksum 41";
+const turbopackStatsPrefix = "TURBOPACK_TASK_CACHE_STATS_JSON:";
 
 function loadConfig(configPath, env) {
   const previous = {};
@@ -158,6 +159,18 @@ function closeWatch(compiler, watching) {
   });
 }
 
+function toHitRate(cacheHits, total) {
+  return total === 0 ? null : cacheHits / total;
+}
+
+function formatHitRate(cache) {
+  if (cache.hitRate === null) {
+    return "n/a";
+  }
+
+  return `${(cache.hitRate * 100).toFixed(1)}% (${cache.cacheHits}/${cache.total})`;
+}
+
 function summarizeStats(stats) {
   const json = stats.toJson({
     all: false,
@@ -168,6 +181,7 @@ function summarizeStats(stats) {
     timings: true,
   });
   const modules = json.modules || [];
+  const cachedModules = modules.filter((module) => module.cached).length;
   const lazyModules = modules.filter((module) => {
     const name = module.name || module.identifier || "";
     return name.includes("src/lazy") || name.includes("lazy/report");
@@ -176,11 +190,51 @@ function summarizeStats(stats) {
   return {
     time: json.time || 0,
     modules: modules.length,
-    cachedModules: modules.filter((module) => module.cached).length,
+    cachedModules,
     lazyModules: lazyModules.map((module) => ({
       name: module.name || module.identifier,
       cached: Boolean(module.cached),
     })),
+    moduleBuildCache: {
+      cacheHits: cachedModules,
+      cacheMisses: modules.length - cachedModules,
+      total: modules.length,
+      hitRate: toHitRate(cachedModules, modules.length),
+    },
+  };
+}
+
+function parseTurbopackTaskStats(output) {
+  const line = output
+    .split(/\r?\n/)
+    .find((entry) => entry.startsWith(turbopackStatsPrefix));
+
+  if (!line) {
+    throw new Error("turbopack: expected task cache stats output from --full-stats");
+  }
+
+  return JSON.parse(line.slice(turbopackStatsPrefix.length));
+}
+
+function isTurbopackModuleBuildTask(name) {
+  return /module|asset|chunk|ecmascript/i.test(name);
+}
+
+function summarizeTurbopackModuleBuildCache(output) {
+  const stats = parseTurbopackTaskStats(output);
+  const entries = Object.entries(stats).filter(([name, value]) => {
+    return isTurbopackModuleBuildTask(name) && value.cache_hit + value.cache_miss > 0;
+  });
+  const cacheHits = entries.reduce((sum, [, value]) => sum + value.cache_hit, 0);
+  const cacheMisses = entries.reduce((sum, [, value]) => sum + value.cache_miss, 0);
+  const total = cacheHits + cacheMisses;
+
+  return {
+    cacheHits,
+    cacheMisses,
+    total,
+    hitRate: toHitRate(cacheHits, total),
+    taskCount: entries.length,
   };
 }
 
@@ -409,6 +463,7 @@ async function verifyLazyBundler(name, runSession, cacheDir, outputDir) {
   return {
     name,
     mode: "persistent cache + lazy import activation",
+    cacheMetric: "stats.modules.cached in activated compilation",
     cold,
     warm,
     cacheFiles: warmCacheFiles,
@@ -422,12 +477,19 @@ function runCommand(command, args, label, env = {}) {
     env: { ...process.env, ...env },
     encoding: "utf8",
   });
-  process.stdout.write(result.stdout || "");
-  process.stderr.write(result.stderr || "");
+  process.stdout.write(filterMachineOutput(result.stdout || ""));
+  process.stderr.write(filterMachineOutput(result.stderr || ""));
   if (result.status !== 0) {
     throw new Error(`${label} failed with exit code ${result.status}`);
   }
   return `${result.stdout || ""}${result.stderr || ""}`;
+}
+
+function filterMachineOutput(output) {
+  return output
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith(turbopackStatsPrefix))
+    .join("\n");
 }
 
 function verifyTurbopackBuildCache() {
@@ -447,6 +509,7 @@ function verifyTurbopackBuildCache() {
     "node",
     "--no-minify",
     "--no-sourcemap",
+    "--full-stats",
     "--persistent-caching",
     "--cache-dir",
     ".turbopack/persistent-cache",
@@ -455,18 +518,20 @@ function verifyTurbopackBuildCache() {
 
   fs.rmSync(cacheDir, { force: true, recursive: true });
   fs.rmSync(outputDir, { force: true, recursive: true });
-  runCommand("cargo", args, "turbopack: cold persistent build", {
+  const coldBuildOutput = runCommand("cargo", args, "turbopack: cold persistent build", {
     TURBO_ENGINE_IGNORE_DIRTY: "1",
   });
+  const coldModuleBuildCache = summarizeTurbopackModuleBuildCache(coldBuildOutput);
   const coldCacheFiles = listFiles(cacheDir).length;
   if (coldCacheFiles === 0) {
     throw new Error("turbopack: expected persistent cache files after cold build");
   }
 
   fs.rmSync(outputDir, { force: true, recursive: true });
-  runCommand("cargo", args, "turbopack: warm persistent build", {
+  const warmBuildOutput = runCommand("cargo", args, "turbopack: warm persistent build", {
     TURBO_ENGINE_IGNORE_DIRTY: "1",
   });
+  const warmModuleBuildCache = summarizeTurbopackModuleBuildCache(warmBuildOutput);
   const warmCacheFiles = listFiles(cacheDir).length;
   if (warmCacheFiles === 0) {
     throw new Error("turbopack: expected persistent cache files after warm build");
@@ -480,14 +545,39 @@ function verifyTurbopackBuildCache() {
   return {
     name: "turbopack",
     mode: "persistent build cache only; this case's top-level CLI has no dev/lazy command",
+    cacheMetric: "TurboTasks module/chunk/asset/ecmascript task cache hits",
     cold: {
-      initial: { time: 0, modules: 0, cachedModules: 0, lazyModules: [] },
-      activated: { time: 0, modules: 0, cachedModules: 0, lazyModules: [] },
+      initial: {
+        time: 0,
+        modules: 0,
+        cachedModules: 0,
+        lazyModules: [],
+        moduleBuildCache: coldModuleBuildCache,
+      },
+      activated: {
+        time: 0,
+        modules: 0,
+        cachedModules: 0,
+        lazyModules: [],
+        moduleBuildCache: coldModuleBuildCache,
+      },
       lazyKeys: 0,
     },
     warm: {
-      initial: { time: 0, modules: 0, cachedModules: 0, lazyModules: [] },
-      activated: { time: 0, modules: 0, cachedModules: 0, lazyModules: [] },
+      initial: {
+        time: 0,
+        modules: 0,
+        cachedModules: 0,
+        lazyModules: [],
+        moduleBuildCache: warmModuleBuildCache,
+      },
+      activated: {
+        time: 0,
+        modules: 0,
+        cachedModules: 0,
+        lazyModules: [],
+        moduleBuildCache: warmModuleBuildCache,
+      },
       lazyKeys: 0,
     },
     cacheFiles: warmCacheFiles,
@@ -504,6 +594,8 @@ function printSummary(results) {
         `${result.name}: ${result.mode}`,
         `  cache files: ${result.cacheFiles}`,
         `  lazy keys: cold ${result.cold.lazyKeys}, warm ${result.warm.lazyKeys}`,
+        `  cache metric: ${result.cacheMetric}`,
+        `  module build cache hit rate: cold ${formatHitRate(cold.moduleBuildCache)}, warm ${formatHitRate(warm.moduleBuildCache)}`,
         `  activated modules: cold ${cold.modules} (${cold.cachedModules} cached), warm ${warm.modules} (${warm.cachedModules} cached)`,
       ].join("\n")
     );
