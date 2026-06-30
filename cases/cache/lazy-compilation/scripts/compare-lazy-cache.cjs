@@ -174,6 +174,22 @@ function formatHitRate(cache) {
   return `${(cache.hitRate * 100).toFixed(1)}% (${cache.cacheHits}/${cache.total})`;
 }
 
+function getModuleName(module) {
+  const id = module.id === undefined || module.id === null ? "" : String(module.id);
+  return module.name || module.identifier || id;
+}
+
+function formatModuleNames(moduleNames) {
+  if (moduleNames === null) {
+    return " n/a (task stats only)";
+  }
+  if (moduleNames.length === 0) {
+    return " none";
+  }
+
+  return `\n    - ${moduleNames.join("\n    - ")}`;
+}
+
 function summarizeStats(stats) {
   const json = stats.toJson({
     all: false,
@@ -184,9 +200,14 @@ function summarizeStats(stats) {
     timings: true,
   });
   const modules = json.modules || [];
-  const cachedModules = modules.filter((module) => module.cached).length;
+  const cachedModuleSummaries = modules.filter((module) => module.cached);
+  const cachedModuleNames = cachedModuleSummaries
+    .map(getModuleName)
+    .filter(Boolean)
+    .sort();
+  const cachedModules = cachedModuleSummaries.length;
   const lazyModules = modules.filter((module) => {
-    const name = module.name || module.identifier || "";
+    const name = getModuleName(module);
     return name.includes("src/lazy") || name.includes("lazy/report");
   });
 
@@ -195,9 +216,10 @@ function summarizeStats(stats) {
     modules: modules.length,
     cachedModules,
     lazyModules: lazyModules.map((module) => ({
-      name: module.name || module.identifier,
+      name: getModuleName(module),
       cached: Boolean(module.cached),
     })),
+    cachedModuleNames,
     moduleBuildCache: {
       cacheHits: cachedModules,
       cacheMisses: modules.length - cachedModules,
@@ -554,6 +576,7 @@ function verifyTurbopackBuildCache() {
         time: 0,
         modules: 0,
         cachedModules: 0,
+        cachedModuleNames: null,
         lazyModules: [],
         moduleBuildCache: coldModuleBuildCache,
       },
@@ -561,6 +584,7 @@ function verifyTurbopackBuildCache() {
         time: 0,
         modules: 0,
         cachedModules: 0,
+        cachedModuleNames: null,
         lazyModules: [],
         moduleBuildCache: coldModuleBuildCache,
       },
@@ -571,6 +595,7 @@ function verifyTurbopackBuildCache() {
         time: 0,
         modules: 0,
         cachedModules: 0,
+        cachedModuleNames: null,
         lazyModules: [],
         moduleBuildCache: warmModuleBuildCache,
       },
@@ -578,6 +603,7 @@ function verifyTurbopackBuildCache() {
         time: 0,
         modules: 0,
         cachedModules: 0,
+        cachedModuleNames: null,
         lazyModules: [],
         moduleBuildCache: warmModuleBuildCache,
       },
@@ -600,6 +626,8 @@ function printSummary(results) {
         `  cache metric: ${result.cacheMetric}`,
         `  module build cache hit rate: cold ${formatHitRate(cold.moduleBuildCache)}, warm ${formatHitRate(warm.moduleBuildCache)}`,
         `  activated modules: cold ${cold.modules} (${cold.cachedModules} cached), warm ${warm.modules} (${warm.cachedModules} cached)`,
+        `  cached modules (cold):${formatModuleNames(cold.cachedModuleNames)}`,
+        `  cached modules (warm):${formatModuleNames(warm.cachedModuleNames)}`,
       ].join("\n")
     );
   }
