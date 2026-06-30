@@ -16,8 +16,8 @@ Turbopack is included as the current CLI contrast. The top-level
 or a lazy compilation flag, so the script verifies persistent cache restore for
 the same dynamic-import entry and reports that this case cannot enable the
 lazy dev-server path through that CLI. Its nearest module-build metric is the
-`--full-stats` TurboTasks cache hit rate for module, asset, chunk, and
-ECMAScript-related tasks from the persistent build run.
+`--full-stats` TurboTasks cache hit rate for the `ModuleAssetContext::process`
+task from the persistent build run.
 
 ```sh
 pnpm run test:lazy-cache

@@ -9,6 +9,9 @@ const repoRoot = path.resolve(caseDir, "../../..");
 const expectedBaseline = "lazy compilation cache case: 3 eagerly loaded records, weight 24";
 const expectedLazyReport = "lazy chunk report: 4 lazy metrics, checksum 41";
 const turbopackStatsPrefix = "TURBOPACK_TASK_CACHE_STATS_JSON:";
+const turbopackModuleBuildTaskNames = new Set([
+  "<turbopack::ModuleAssetContext as dyn turbopack_core::context::AssetContext>::process",
+]);
 
 function loadConfig(configPath, env) {
   const previous = {};
@@ -217,7 +220,7 @@ function parseTurbopackTaskStats(output) {
 }
 
 function isTurbopackModuleBuildTask(name) {
-  return /module|asset|chunk|ecmascript/i.test(name);
+  return turbopackModuleBuildTaskNames.has(name);
 }
 
 function summarizeTurbopackModuleBuildCache(output) {
@@ -545,7 +548,7 @@ function verifyTurbopackBuildCache() {
   return {
     name: "turbopack",
     mode: "persistent build cache only; this case's top-level CLI has no dev/lazy command",
-    cacheMetric: "TurboTasks module/chunk/asset/ecmascript task cache hits",
+    cacheMetric: "TurboTasks ModuleAssetContext::process task cache hits",
     cold: {
       initial: {
         time: 0,
