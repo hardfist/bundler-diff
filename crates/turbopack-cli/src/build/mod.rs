@@ -559,7 +559,7 @@ pub async fn build(args: &BuildArguments) -> Result<()> {
         };
         let tt = TurboTasks::new(TurboTasksBackend::new(
             BackendOptions {
-                dependency_tracking: false,
+                dependency_tracking: true,
                 storage_mode: Some(storage_mode),
                 ..Default::default()
             },
@@ -630,6 +630,10 @@ pub async fn build(args: &BuildArguments) -> Result<()> {
                 serde_json::to_string(stats.as_ref())?
             );
         }
+    }
+
+    if args.common.persistent_caching {
+        tt.stop_and_wait().await;
     }
 
     // Intentionally leak this `Arc`. Otherwise we'll waste time during process exit performing a
