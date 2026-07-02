@@ -6,43 +6,43 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use either::Either;
 use rustc_hash::FxHashSet;
 use tracing::Instrument;
 use turbo_rcstr::RcStr;
 use turbo_tasks::{
     Effects, OperationVc, ResolvedVc, TransientInstance, TryJoinIterExt, TurboTasks,
     TurboTasksApi, Vc,
-    take_effects,
+    read_strongly_consistent_and_apply_effects, take_effects,
 };
 use turbo_tasks_backend::{
-    BackendOptions, GitVersionInfo, NoopBackingStorage, StartupCacheState, StorageMode,
-    TurboBackingStorage, TurboTasksBackend, noop_backing_storage, turbo_backing_storage,
+    BackendOptions, GitVersionInfo, StartupCacheState, StorageMode, TurboTasksBackend,
+    noop_backing_storage, turbo_backing_storage,
 };
 use turbo_tasks_fs::FileSystem;
 use turbo_unix_path::join_path;
+use turbopack::global_module_ids::get_global_module_id_strategy;
 use turbopack_browser::{BrowserChunkingContext, CurrentChunkMethod};
 use turbopack_cli_utils::issue::{ConsoleUi, LogOptions};
 use turbopack_core::{
     asset::Asset,
     chunk::{
-        ChunkingConfig, ChunkingContext, ChunkingContextExt, EvaluatableAsset, MangleType,
-        MinifyType, SourceMapsType, availability_info::AvailabilityInfo,
-        chunk_id_strategy::ModuleIdStrategy,
+        ChunkingConfig, ChunkingContext, ChunkingContextExt, ContentHashing, EvaluatableAsset,
+        MangleType, MinifyType, SourceMapsType, availability_info::AvailabilityInfo,
     },
+    context::AssetContext,
     environment::{BrowserEnvironment, Environment, ExecutionEnvironment, NodeJsEnvironment},
     ident::AssetIdent,
     issue::{IssueReporter, IssueSeverity, handle_issues},
     module::Module,
     module_graph::{
-        ModuleGraph, SingleModuleGraph,
+        GraphEntries, ModuleGraph, SingleModuleGraph,
         binding_usage_info::compute_binding_usage_info,
-        chunk_group_info::{ChunkGroup, ChunkGroupEntry},
+        chunk_group_info::{ChunkGroup, ChunkGroupEntry, EntryHeuristics},
     },
     output::{OutputAsset, OutputAssets, OutputAssetsWithReferenced},
     reference_type::{EntryReferenceSubType, ReferenceType},
     resolve::{
-        origin::{PlainResolveOrigin, ResolveOrigin, ResolveOriginExt},
+        origin::{PlainResolveOrigin, ResolveOrigin},
         parse::Request,
     },
 };
@@ -61,7 +61,7 @@ use crate::{
     },
 };
 
-type Backend = TurboTasksBackend<Either<TurboBackingStorage, NoopBackingStorage>>;
+type Backend = TurboTasksBackend;
 
 pub struct TurbopackBuildBuilder {
     turbo_tasks: Arc<TurboTasks<Backend>>,
@@ -167,10 +167,7 @@ impl TurbopackBuildBuilder {
                     self.webpack_loader_rules.clone(),
                 ));
 
-                // Await the result to propagate any errors and capture effects.
-                let effects = wrapper_op.read_strongly_consistent().await?;
-
-                effects.apply().await?;
+                read_strongly_consistent_and_apply_effects(wrapper_op, |e| e).await?;
 
                 let issue_reporter: Vc<Box<dyn IssueReporter>> =
                     Vc::upcast(ConsoleUi::new(TransientInstance::new(LogOptions {
@@ -295,27 +292,33 @@ async fn build_internal(
         .await?)
         .to_vec();
 
-    let origin = PlainResolveOrigin::new(asset_context, project_fs.root().await?.join("_")?);
+    let origin =
+        PlainResolveOrigin::new(asset_context, project_fs.root().await?.join("_")?).await?;
+    let resolve_options = origin.resolve_options();
+    let asset_context = origin.asset_context();
+    let origin_path = origin.origin_path();
     let project_dir = &project_dir;
     let entries = async move {
         entry_requests
             .into_iter()
-            .map(|request_vc| async move {
-                let ty = ReferenceType::Entry(EntryReferenceSubType::Undefined);
-                let request = request_vc.await?;
-                origin
-                    .resolve_asset(request_vc, origin.resolve_options(), ty)
-                    .await?
-                    .await?
-                    .first_module()
-                    .await?
-                    .with_context(|| {
-                        format!(
-                            "Unable to resolve entry {} from directory {}.",
-                            request.request().unwrap(),
-                            project_dir
-                        )
-                    })
+            .map(|request_vc| {
+                let origin_path = origin_path.clone();
+                async move {
+                    let ty = ReferenceType::Entry(EntryReferenceSubType::Undefined);
+                    let request = request_vc.await?;
+                    asset_context
+                        .resolve_asset(origin_path, request_vc, resolve_options, ty)
+                        .await?
+                        .first_module()
+                        .await?
+                        .with_context(|| {
+                            format!(
+                                "Unable to resolve entry {} from directory {}.",
+                                request.request().unwrap(),
+                                project_dir
+                            )
+                        })
+                }
             })
             .try_join()
             .await
@@ -324,7 +327,11 @@ async fn build_internal(
     .await?;
 
     let single_graph = SingleModuleGraph::new_with_entries(
-        ResolvedVc::cell(vec![ChunkGroupEntry::Entry(entries.clone())]),
+        GraphEntries::from_chunk_groups(vec![ChunkGroupEntry::Entry {
+            modules: entries.clone(),
+            heuristics: EntryHeuristics::default(),
+        }])
+        .resolved_cell(),
         false,
         true,
     );
@@ -337,7 +344,9 @@ async fn build_internal(
         .await?;
     module_graph = ModuleGraph::from_graphs(vec![single_graph], Some(binding_usage));
     let module_graph = module_graph.connect();
-    let module_id_strategy = ModuleIdStrategy::default().resolved_cell();
+    let module_id_strategy = get_global_module_id_strategy(module_graph)
+        .to_resolved()
+        .await?;
 
     let chunking_context: Vc<Box<dyn ChunkingContext>> = match target {
         Target::Browser => {
@@ -388,6 +397,8 @@ async fn build_internal(
                                 ..Default::default()
                             },
                         )
+                        .chunk_content_hashing(ContentHashing::Direct { length: 13 })
+                        .asset_content_hashing(ContentHashing::Direct { length: 13 })
                         .nested_async_availability(true)
                         .module_merging(scope_hoist);
                 }
@@ -563,7 +574,7 @@ pub async fn build(args: &BuildArguments) -> Result<()> {
                 storage_mode: Some(storage_mode),
                 ..Default::default()
             },
-            Either::Left(backing_storage),
+            backing_storage,
         ));
         if let StartupCacheState::Invalidated { reason_code } = cache_state {
             eprintln!(
@@ -582,7 +593,7 @@ pub async fn build(args: &BuildArguments) -> Result<()> {
                 storage_mode: None,
                 ..Default::default()
             },
-            Either::Right(noop_backing_storage()),
+            noop_backing_storage(),
         ))
     };
 
