@@ -54,7 +54,7 @@ use turbopack_node::{child_process_backend, execution_context::ExecutionContext}
 use turbopack_nodejs::NodeJsChunkingContext;
 
 use crate::{
-    arguments::{BuildArguments, Target},
+    arguments::{BuildArguments, Target, TurbopackMemoryEviction},
     contexts::{NodeEnv, get_client_asset_context, get_client_compile_time_info},
     util::{
         EntryRequest, NormalizedDirs, normalize_dirs, normalize_entries, output_fs, project_fs,
@@ -547,6 +547,11 @@ pub async fn build(args: &BuildArguments) -> Result<()> {
 
     let is_ci = std::env::var("CI").is_ok_and(|v| !v.is_empty());
     let is_short_session = true; // build sessions are always short
+    let raw_memory_eviction_env = std::env::var("TURBO_ENGINE_EVICT_AFTER_SNAPSHOT").ok();
+    let turbopack_memory_eviction = TurbopackMemoryEviction::from_cli_and_env(
+        args.common.turbopack_memory_eviction,
+        raw_memory_eviction_env.as_deref(),
+    );
 
     let tt = if args.common.persistent_caching {
         let version_info = GitVersionInfo {
@@ -572,6 +577,7 @@ pub async fn build(args: &BuildArguments) -> Result<()> {
             BackendOptions {
                 dependency_tracking: true,
                 storage_mode: Some(storage_mode),
+                evict_after_snapshot: turbopack_memory_eviction.evicts_after_snapshot(),
                 ..Default::default()
             },
             backing_storage,

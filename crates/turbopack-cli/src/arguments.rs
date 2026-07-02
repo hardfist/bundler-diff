@@ -38,6 +38,29 @@ pub enum Target {
     Node,
 }
 
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+pub enum TurbopackMemoryEviction {
+    Off,
+    Full,
+}
+
+impl TurbopackMemoryEviction {
+    pub fn from_cli_and_env(cli_value: Option<Self>, raw_env: Option<&str>) -> Self {
+        if let Some(cli_value) = cli_value {
+            return cli_value;
+        }
+
+        match raw_env {
+            None | Some("1") | Some("true") => Self::Full,
+            _ => Self::Off,
+        }
+    }
+
+    pub fn evicts_after_snapshot(self) -> bool {
+        matches!(self, Self::Full)
+    }
+}
+
 #[derive(Debug, Args, Clone)]
 pub struct CommonArguments {
     /// The entrypoints of the project. Resolved relative to the project's
@@ -89,6 +112,14 @@ pub struct CommonArguments {
     /// Defaults to `.turbopack/cache` relative to the project directory.
     #[clap(long)]
     pub cache_dir: Option<PathBuf>,
+
+    /// Controls Turbopack memory eviction after persistent cache snapshots.
+    ///
+    /// `full` evicts evictable tasks after every snapshot; `off` disables eviction.
+    /// Defaults to `full`, matching Next.js, unless `TURBO_ENGINE_EVICT_AFTER_SNAPSHOT` is set to
+    /// a value other than `1` or `true`.
+    #[clap(long, value_enum)]
+    pub turbopack_memory_eviction: Option<TurbopackMemoryEviction>,
     // Enable experimental garbage collection with the provided memory limit in
     // MB.
     // #[clap(long)]
@@ -156,5 +187,52 @@ impl FromStr for IssueSeverityCliOption {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         <IssueSeverityCliOption as clap::ValueEnum>::from_str(s, true).map_err(|s| anyhow!("{}", s))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TurbopackMemoryEviction;
+
+    #[test]
+    fn cli_memory_eviction_value_overrides_env() {
+        assert_eq!(
+            TurbopackMemoryEviction::from_cli_and_env(
+                Some(TurbopackMemoryEviction::Off),
+                Some("true"),
+            ),
+            TurbopackMemoryEviction::Off
+        );
+        assert_eq!(
+            TurbopackMemoryEviction::from_cli_and_env(
+                Some(TurbopackMemoryEviction::Full),
+                Some("0"),
+            ),
+            TurbopackMemoryEviction::Full
+        );
+    }
+
+    #[test]
+    fn memory_eviction_env_fallback_matches_next_config_normalization() {
+        assert_eq!(
+            TurbopackMemoryEviction::from_cli_and_env(None, None),
+            TurbopackMemoryEviction::Full
+        );
+        assert_eq!(
+            TurbopackMemoryEviction::from_cli_and_env(None, Some("1")),
+            TurbopackMemoryEviction::Full
+        );
+        assert_eq!(
+            TurbopackMemoryEviction::from_cli_and_env(None, Some("true")),
+            TurbopackMemoryEviction::Full
+        );
+        assert_eq!(
+            TurbopackMemoryEviction::from_cli_and_env(None, Some("0")),
+            TurbopackMemoryEviction::Off
+        );
+        assert_eq!(
+            TurbopackMemoryEviction::from_cli_and_env(None, Some("false")),
+            TurbopackMemoryEviction::Off
+        );
     }
 }
