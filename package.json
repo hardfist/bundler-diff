@@ -2,6 +2,7 @@
   "name": "runtime",
   "private": true,
   "scripts": {
-    "build:all": "pnpm --recursive --workspace-concurrency=1 run build:all"
+    "build:all": "pnpm --recursive --workspace-concurrency=1 run build:all",
+    "package:turbopack-cli-release": "node scripts/package-turbopack-cli-release.mjs"
   }
 }

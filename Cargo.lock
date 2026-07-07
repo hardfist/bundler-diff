@@ -7306,6 +7306,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "turbopack-trace-decoder-wasm"
+version = "0.1.0"
+dependencies = [
+ "postcard",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "turbopack-trace-utils"
 version = "0.1.0"
 dependencies = [

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/turbopack-cli"]
+members = ["crates/turbopack-cli", "crates/turbopack-trace-decoder-wasm"]
 
 [workspace.lints.clippy]
 too_many_arguments = "allow"

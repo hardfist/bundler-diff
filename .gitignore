@@ -1,5 +1,6 @@
 node_modules/
 target/
+.release/
 cases/cache/**/dist/
 cases/cache/**/.rspack-cache/
 cases/cache/**/.webpack-cache/
