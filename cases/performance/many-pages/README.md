@@ -48,6 +48,8 @@ pnpm --dir cases/performance/many-pages benchmark -- \
 2. 同一 Chrome target 依次重新加载入口并访问剩余 99 个路由，然后回到第 1 个路由再等待和采样。每次路由访问使用新文档，因此只有当前路由保持活跃的 HMR 订阅，但 dev server 进程不会重启。两次采样的当前页面均为 route 1，变化量只来自 dev server 曾经编译过的路由历史。
 3. 报告 `Footprint@1`、`Footprint@100`、绝对增长和百分比增长。
 
+webpack 5 的默认 lazy-compilation backend 会在客户端断开后继续保留模块 120 秒，而且这个延迟没有公开配置项。该窗口会让快速访问过的所有路由同时留在最终 compilation，无法与 Rspack 每次 compilation 消费并清空 active set 的行为对齐。因此本 case 为 webpack 使用等价的自定义 backend，将断开后的 deactivation delay 设为 `0`；这只改变 lazy module 的失活时机，不改变路由、模块量或缓存配置。
+
 `footprint -t` 会包含 dev server 的所有后代进程，并对进程间共享映射去重；多进程场景读取其 `Summary Footprint`，而不是把各进程指标简单相加。Chrome 不属于 dev-server 进程树，因此不计入结果。Physical footprint 采样仅支持 macOS。
 
 ### HMR

@@ -1,5 +1,7 @@
 const path = require("node:path");
 
+const { createWebpackLazyBackend } = require("./scripts/lib/webpack-lazy-backend.cjs");
+
 function createBundlerConfig(bundler) {
   if (bundler !== "webpack" && bundler !== "rspack") {
     throw new Error(`unsupported JavaScript bundler: ${bundler}`);
@@ -48,7 +50,12 @@ function createBundlerConfig(bundler) {
     imports: true,
   };
   if (bundler === "webpack") {
-    config.experiments = { lazyCompilation };
+    config.experiments = {
+      lazyCompilation: {
+        ...lazyCompilation,
+        backend: createWebpackLazyBackend({ deactivationDelayMs: 0 }),
+      },
+    };
   } else {
     config.experiments = {
       incremental: {
