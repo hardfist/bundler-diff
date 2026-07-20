@@ -44,6 +44,8 @@ pnpm --dir cases/performance/many-pages benchmark -- \
 
 每个 bundler 从无持久缓存的干净 dev-server 进程启动：
 
+两者都启用单代内存 cache：webpack 显式配置 `cache.type = "memory"` 和 `maxGenerations = 1`，Rspack 使用 `cache: true` 对应的开发模式 memory cache（内部 `max_generations = 1`）。cache 只存在于本次 dev-server 进程，不写入持久缓存目录。
+
 1. 浏览器访问并渲染第 1 个路由；等待稳定后，连续 5 次运行 `/usr/bin/footprint -f bytes -t <server-pid>`，取 Physical footprint 中位数。
 2. 同一 Chrome target 依次重新加载入口并访问剩余 99 个路由，然后回到第 1 个路由再等待和采样。每次路由访问使用新文档，因此只有当前路由保持活跃的 HMR 订阅，但 dev server 进程不会重启。两次采样的当前页面均为 route 1，变化量只来自 dev server 曾经编译过的路由历史。
 3. 报告 `Footprint@1`、`Footprint@100`、绝对增长和百分比增长。

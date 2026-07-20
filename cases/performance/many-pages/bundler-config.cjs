@@ -13,7 +13,6 @@ function createBundlerConfig(bundler) {
     mode: "development",
     context: fixtureDir,
     entry: "./src/index.js",
-    cache: false,
     devtool: false,
     output: {
       path: path.join(fixtureDir, `.${bundler}-dist`),
@@ -50,6 +49,10 @@ function createBundlerConfig(bundler) {
     imports: true,
   };
   if (bundler === "webpack") {
+    config.cache = {
+      type: "memory",
+      maxGenerations: 1,
+    };
     config.experiments = {
       lazyCompilation: {
         ...lazyCompilation,
@@ -57,6 +60,7 @@ function createBundlerConfig(bundler) {
       },
     };
   } else {
+    config.cache = true;
     config.experiments = {
       incremental: {
         // This benchmark intentionally includes full chunk-graph work in HMR.
