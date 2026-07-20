@@ -47,7 +47,7 @@ importers:
         specifier: ^2.0.0
         version: 2.1.0(@rspack/core@2.0.6)(selfsigned@5.5.0)
       webpack:
-        specifier: ^5.107.2
+        specifier: 5.107.2
         version: 5.107.2(webpack-cli@7.0.3)
       webpack-dev-server:
         specifier: ^5.2.2

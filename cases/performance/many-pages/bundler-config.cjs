@@ -53,7 +53,7 @@ function createBundlerConfig(bundler) {
     config.experiments = {
       lazyCompilation: {
         ...lazyCompilation,
-        backend: createWebpackLazyBackend({ deactivationDelayMs: 0 }),
+        backend: createWebpackLazyBackend(),
       },
     };
   } else {

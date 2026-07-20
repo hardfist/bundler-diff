@@ -1,10 +1,16 @@
 const http = require("node:http");
 
-// Webpack's default backend uses the same protocol but hardcodes a 120-second
-// disconnect grace period. This benchmark needs that lifecycle delay to be zero.
-function createWebpackLazyBackend({ deactivationDelayMs = 0 } = {}) {
-  if (!Number.isInteger(deactivationDelayMs) || deactivationDelayMs < 0) {
-    throw new Error("deactivationDelayMs must be a non-negative integer");
+const SUPPORTED_WEBPACK_VERSION = "5.107.2";
+
+// Mirrors webpack 5.107.2's lib/hmr/lazyCompilationBackend.js protocol, but
+// removes its hardcoded 120-second disconnect grace period.
+function createWebpackLazyBackend() {
+  const webpackVersion = require("webpack/package.json").version;
+  if (webpackVersion !== SUPPORTED_WEBPACK_VERSION) {
+    throw new Error(
+      `Webpack lazy backend must be reviewed for webpack ${webpackVersion}; ` +
+        `expected ${SUPPORTED_WEBPACK_VERSION}`,
+    );
   }
 
   return (compiler, callback) => {
@@ -32,11 +38,7 @@ function createWebpackLazyBackend({ deactivationDelayMs = 0 } = {}) {
 
       const keys = request.url.slice(prefix.length).split("@");
       request.socket.once("close", () => {
-        if (deactivationDelayMs === 0) {
-          deactivate(keys);
-        } else {
-          setTimeout(() => deactivate(keys), deactivationDelayMs);
-        }
+        deactivate(keys);
       });
       request.socket.setNoDelay(true);
       response.writeHead(200, {
@@ -70,11 +72,8 @@ function createWebpackLazyBackend({ deactivationDelayMs = 0 } = {}) {
       if (closing) socket.destroy();
     });
     server.on("clientError", (error, socket) => {
-      if (closing || error.code === "ECONNRESET") {
-        socket.destroy();
-        return;
-      }
-      logger.warn(error);
+      if (!closing && error.code !== "ECONNRESET") logger.warn(error);
+      socket.destroy();
     });
     server.once("error", (error) => {
       if (!initialized) callback(error);

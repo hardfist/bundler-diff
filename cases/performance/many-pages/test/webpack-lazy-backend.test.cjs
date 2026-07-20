@@ -4,13 +4,15 @@ const test = require("node:test");
 
 const { createBundlerConfig } = require("../bundler-config.cjs");
 
-function waitFor(predicate, timeoutMs = 1000) {
-  const deadline = Date.now() + timeoutMs;
+function waitForImmediateDeactivation(predicate) {
+  const deadline = Date.now() + 100;
   return new Promise((resolve, reject) => {
     function poll() {
       if (predicate()) return resolve();
-      if (Date.now() >= deadline) return reject(new Error("condition was not met"));
-      setTimeout(poll, 10);
+      if (Date.now() >= deadline) {
+        return reject(new Error("lazy module remained active after disconnect"));
+      }
+      setImmediate(poll);
     }
     poll();
   });
@@ -52,5 +54,7 @@ test("Webpack lazy modules deactivate immediately when the client disconnects", 
   assert.equal(invalidations, 1);
 
   response.destroy();
-  await waitFor(() => api.module(lazyModule).active === false);
+  await waitForImmediateDeactivation(
+    () => api.module(lazyModule).active === false,
+  );
 });
