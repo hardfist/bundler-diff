@@ -45,9 +45,21 @@ test("generateFixture creates isolated route graphs and benchmark metadata", (t)
     path.join(outputDir, "src/pages/route-002/module-001.js"),
     "utf8",
   );
-  assert.match(firstPage, /const REVISION = "initial"/);
-  assert.match(firstPage, /from "\.\/module-001\.js"/);
-  assert.match(firstPage, /import\.meta\.turbopackHot \|\| import\.meta\.webpackHot/);
+  assert.match(
+    firstPage,
+    /import \{ HMR_REVISION, value_module_001 \} from "\.\/module-001\.js"/,
+  );
+  assert.match(firstPage, /revision: HMR_REVISION/);
+  assert.doesNotMatch(firstPage, /const REVISION =/);
+  assert.match(
+    firstPage,
+    /import\.meta\.turbopackHot\.accept\("\.\/module-001\.js", \(\) => \{/,
+  );
+  assert.match(
+    firstPage,
+    /import\.meta\.webpackHot\.accept\("\.\/module-001\.js", \(\) => \{/,
+  );
+  assert.match(firstLeaf, /export const HMR_REVISION = "initial"/);
   assert.match(firstLeaf, /route-1-module-1-payload-0/);
   assert.doesNotMatch(secondLeaf, /route-1-module-1-payload-0/);
   assert.ok(fs.existsSync(path.join(outputDir, "public/index.html")));

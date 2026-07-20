@@ -52,7 +52,7 @@ pnpm --dir cases/performance/many-pages benchmark -- \
 
 ### HMR
 
-HMR 的 1 路由状态和 100 路由状态分别使用新的干净 dev-server 进程，避免先前 HMR 或内存场景污染结果。100 路由状态会在访问完所有路由后回到 route 1；两种状态都修改 route 1 页面模块中的 revision 标记，避免页面身份成为混杂变量。计时从文件写入前开始，直到 Chrome 中该模块重执行并更新 DOM 为止。
+HMR 的 1 路由状态和 100 路由状态分别使用新的干净 dev-server 进程，避免先前 HMR 或内存场景污染结果。100 路由状态会在访问完所有路由后回到 route 1；两种状态都修改 route 1 的叶子依赖 `module-001.js` 中导出的 revision，避免页面身份成为混杂变量。页面模块显式接受并消费这个依赖；Rspack 配置关闭 incremental `buildChunkGraph` 跳过，保证 dependency rebuild 后完整执行该阶段及其后续处理。计时从依赖文件写入前开始，直到 dependency accept 回调使用新的 ESM binding 更新 Chrome DOM 为止。
 
 默认先做 1 次不计入结果的预热，再记录 5 次，输出 1/100 路由状态的 median、p95，以及 median 差值和百分比。页面启动时生成的 document token 在每次更新后都会校验；token 改变会使基准失败，因此整页刷新不会被误报成 HMR。
 

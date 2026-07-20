@@ -9,6 +9,7 @@ const {
   generateFixture,
   routeName,
 } = require("./lib/fixture.cjs");
+const { replaceHmrDependencyRevision } = require("./lib/hmr.cjs");
 const {
   delay,
   sampleProcessTreePhysicalFootprint,
@@ -263,15 +264,6 @@ async function measureMemory(options) {
   });
 }
 
-function replaceRevision(source, revision) {
-  const next = source.replace(
-    /const REVISION = "[^"]+";/,
-    `const REVISION = ${JSON.stringify(revision)};`,
-  );
-  if (next === source) throw new Error("failed to locate the HMR revision marker");
-  return next;
-}
-
 async function measureHmrState(options, visitedRoutes) {
   return withServer(options, async ({ page }) => {
     await visitRoutes(page, visitedRoutes, options.routeTimeoutMs, options.bundler);
@@ -282,13 +274,13 @@ async function measureHmrState(options, visitedRoutes) {
     }
     await delay(options.settleMs);
 
-    const pageFile = path.join(
+    const dependencyFile = path.join(
       fixtureDir,
       "src/pages",
       routeName(1),
-      "page.js",
+      "module-001.js",
     );
-    const original = fs.readFileSync(pageFile, "utf8");
+    const original = fs.readFileSync(dependencyFile, "utf8");
     let current = original;
     const documentToken = await page.evaluate("globalThis.__BENCH_DOCUMENT_TOKEN__");
     const samplesMs = [];
@@ -297,9 +289,9 @@ async function measureHmrState(options, visitedRoutes) {
     try {
       for (let iteration = 0; iteration < iterations; iteration += 1) {
         const revision = `hmr-${visitedRoutes}-${iteration}-${Date.now()}`;
-        current = replaceRevision(current, revision);
+        current = replaceHmrDependencyRevision(current, revision);
         const start = performance.now();
-        fs.writeFileSync(pageFile, current);
+        fs.writeFileSync(dependencyFile, current);
         await page.waitFor(
           `globalThis.__BENCH_HMR_REVISION__ === ${JSON.stringify(revision)}`,
           {
@@ -316,12 +308,14 @@ async function measureHmrState(options, visitedRoutes) {
         if (iteration >= options.hmrWarmup) samplesMs.push(durationMs);
       }
     } finally {
-      fs.writeFileSync(pageFile, original);
+      fs.writeFileSync(dependencyFile, original);
     }
 
     return {
       visitedRoutes,
       editedRoute: 1,
+      editedDependency: "src/pages/route-001/module-001.js",
+      dependencyMutation: "exported-revision",
       warmupRuns: options.hmrWarmup,
       samplesMs,
       summaryMs: summarizeSamples(samplesMs),
@@ -434,7 +428,7 @@ async function main() {
     ? path.resolve(options.output)
     : path.join(caseDir, "results/latest.json");
   const document = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatedAt: new Date().toISOString(),
     repositoryCommit: gitOutput(["rev-parse", "HEAD"]),
     turbopackCommit: gitOutput(["rev-parse", "HEAD"], path.join(repoRoot, "third_party/turbopack")),

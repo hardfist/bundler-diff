@@ -50,6 +50,12 @@ function createBundlerConfig(bundler) {
   if (bundler === "webpack") {
     config.experiments = { lazyCompilation };
   } else {
+    config.experiments = {
+      incremental: {
+        // This benchmark intentionally includes full chunk-graph work in HMR.
+        buildChunkGraph: false,
+      },
+    };
     config.lazyCompilation = lazyCompilation;
   }
   return config;

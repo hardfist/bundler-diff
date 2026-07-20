@@ -93,8 +93,12 @@ function createLeafSource(route, moduleNumber, payloadItems) {
     { length: payloadItems },
     (_, item) => `"route-${route}-module-${moduleNumber}-payload-${item}"`,
   ).join(",\n  ");
+  const isHmrDependency = moduleNumber === 1;
+  const hmrRevision = isHmrDependency
+    ? `export const HMR_REVISION = "initial";\n\n`
+    : "";
 
-  return `const payload_${name} = Object.freeze([\n  ${payload}\n]);
+  return `${hmrRevision}const payload_${name} = Object.freeze([\n  ${payload}\n]);
 
 export function value_${name}(seed) {
   let result = seed + ${route * 97 + moduleNumber};
@@ -113,27 +117,36 @@ function createPageSource(route, modulesPerRoute) {
   for (let moduleNumber = 1; moduleNumber <= modulesPerRoute; moduleNumber += 1) {
     const fileName = moduleName(moduleNumber);
     const exportName = fileName.replace("-", "_");
-    imports.push(`import { value_${exportName} } from "./${fileName}.js";`);
+    const importedNames =
+      moduleNumber === 1 ? `HMR_REVISION, value_${exportName}` : `value_${exportName}`;
+    imports.push(`import { ${importedNames} } from "./${fileName}.js";`);
     calls.push(`value_${exportName}(${route + moduleNumber})`);
   }
 
   return `${imports.join("\n")}
 
-const REVISION = "initial";
 const ROUTE = ${route};
 const CHECKSUM = [\n  ${calls.join(",\n  ")}\n].reduce((sum, value) => (sum + value) % 1000003, 0);
 
 export function renderPage() {
-  globalThis.__BENCH_RENDER__({ route: ROUTE, revision: REVISION, checksum: CHECKSUM });
+  globalThis.__BENCH_RENDER__({ route: ROUTE, revision: HMR_REVISION, checksum: CHECKSUM });
 }
 
 if (globalThis.__ACTIVE_ROUTE__ === ROUTE) {
   renderPage();
 }
 
-const hot = import.meta.turbopackHot || import.meta.webpackHot;
-if (hot) {
-  hot.accept();
+// Keep both calls direct: each bundler statically rewrites the accepted
+// dependency specifier through its own import.meta hot API.
+if (import.meta.turbopackHot) {
+  import.meta.turbopackHot.accept("./module-001.js", () => {
+    renderPage();
+  });
+}
+if (import.meta.webpackHot) {
+  import.meta.webpackHot.accept("./module-001.js", () => {
+    renderPage();
+  });
 }
 
 export const routeName = "${name}";

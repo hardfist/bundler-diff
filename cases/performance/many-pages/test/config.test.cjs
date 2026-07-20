@@ -15,4 +15,5 @@ test("webpack and Rspack use equivalent dev-server and lazy compilation settings
     entries: false,
     imports: true,
   });
+  assert.equal(rspackConfig.experiments.incremental.buildChunkGraph, false);
 });
