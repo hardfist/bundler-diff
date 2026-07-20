@@ -40,9 +40,9 @@ function usage() {
 
 Options:
   --bundlers=turbopack,webpack,rspack
-  --routes=100
-  --modules-per-route=30
-  --payload-items=12
+  --routes=${DEFAULT_FIXTURE_OPTIONS.routeCount}
+  --modules-per-route=${DEFAULT_FIXTURE_OPTIONS.modulesPerRoute}
+  --payload-items=${DEFAULT_FIXTURE_OPTIONS.payloadItems}
   --hmr-runs=5
   --hmr-warmup=1
   --settle-ms=1000

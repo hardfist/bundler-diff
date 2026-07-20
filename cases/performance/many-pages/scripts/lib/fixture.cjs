@@ -3,7 +3,7 @@ const path = require("node:path");
 
 const DEFAULT_FIXTURE_OPTIONS = Object.freeze({
   routeCount: 100,
-  modulesPerRoute: 30,
+  modulesPerRoute: 300,
   payloadItems: 12,
 });
 

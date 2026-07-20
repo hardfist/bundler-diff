@@ -2,7 +2,7 @@
 
 这个 case 比较 Turbopack、webpack 和 Rspack 在开发模式下访问大量低共享度路由时的 macOS Physical footprint 增长，以及模块图变大前后的端到端 HMR 延迟。
 
-默认 fixture 包含 100 个客户端路由。每个路由由 1 个页面模块和 30 个叶子模块组成，只有入口和路由表两个模块共享：总计 3,102 个模块，其中 3,100 个（99.94%）只属于单一路由。路由表使用显式动态 `import()`，webpack 和 Rspack 都开启按动态导入懒编译，Turbopack 使用其 dev server 的按请求编译路径。
+默认 fixture 包含 100 个客户端路由。每个路由由 1 个页面模块和 300 个叶子模块组成，只有入口和路由表两个模块共享：总计 30,102 个模块，其中 30,100 个（99.99%）只属于单一路由。路由表使用显式动态 `import()`，webpack 和 Rspack 都开启按动态导入懒编译，Turbopack 使用其 dev server 的按请求编译路径。
 
 ## 运行
 
@@ -29,7 +29,7 @@ pnpm --dir cases/performance/many-pages benchmark:quick
 pnpm --dir cases/performance/many-pages benchmark -- \
   --bundlers=turbopack,webpack,rspack \
   --routes=100 \
-  --modules-per-route=30 \
+  --modules-per-route=300 \
   --payload-items=12 \
   --hmr-runs=5 \
   --hmr-warmup=1 \

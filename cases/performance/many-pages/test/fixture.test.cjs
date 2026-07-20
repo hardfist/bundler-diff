@@ -57,6 +57,23 @@ test("generateFixture creates isolated route graphs and benchmark metadata", (t)
   );
 });
 
+test("generateFixture defaults to 300 leaf modules per route", (t) => {
+  const parentDir = fs.mkdtempSync(path.join(os.tmpdir(), "many-pages-default-"));
+  const outputDir = path.join(parentDir, "generated");
+  t.after(() => fs.rmSync(parentDir, { recursive: true, force: true }));
+
+  const metadata = generateFixture({
+    outputDir,
+    routeCount: 1,
+    payloadItems: 1,
+  });
+
+  assert.equal(metadata.modulesPerRoute, 300);
+  assert.equal(metadata.routeLocalModules, 301);
+  assert.equal(metadata.totalModules, 303);
+  assert.ok(fs.existsSync(path.join(outputDir, "src/pages/route-001/module-300.js")));
+});
+
 test("generateFixture rejects invalid dimensions", () => {
   assert.throws(
     () =>
