@@ -23,16 +23,24 @@ function summarizeSamples(samples) {
   };
 }
 
-function parsePsTable(output) {
+function parsePhysicalFootprintBytes(output) {
+  const summary = output.match(/^Summary Footprint:\s+(\d+) B$/m);
+  if (summary) return Number(summary[1]);
+
+  const individual = [...output.matchAll(/^\s*phys_footprint:\s+(\d+) B$/gm)];
+  if (individual.length === 1) return Number(individual[0][1]);
+  throw new Error("footprint output did not contain an unambiguous physical footprint");
+}
+
+function parseProcessTable(output) {
   return output
     .split(/\r?\n/)
-    .map((line) => line.match(/^\s*(\d+)\s+(\d+)\s+(\d+)(?:\s+(.*))?$/))
+    .map((line) => line.match(/^\s*(\d+)\s+(\d+)(?:\s+(.*))?$/))
     .filter(Boolean)
     .map((match) => ({
       pid: Number(match[1]),
       parentPid: Number(match[2]),
-      rssKb: Number(match[3]),
-      command: match[4] || "",
+      command: match[3] || "",
     }));
 }
 
@@ -59,20 +67,26 @@ function descendantsOf(processes, rootPid) {
   return result;
 }
 
-async function readProcessTreeRss(rootPid) {
-  if (process.platform === "win32") {
-    throw new Error("process-tree RSS sampling currently supports macOS and Linux only");
+async function readProcessTreePhysicalFootprint(rootPid) {
+  if (process.platform !== "darwin") {
+    throw new Error("Physical footprint sampling requires macOS /usr/bin/footprint");
   }
   const { stdout } = await execFileAsync("ps", [
     "-axo",
-    "pid=,ppid=,rss=,command=",
+    "pid=,ppid=,command=",
   ]);
-  const processes = descendantsOf(parsePsTable(stdout), rootPid);
+  const processes = descendantsOf(parseProcessTable(stdout), rootPid);
   if (processes.length === 0) {
     throw new Error(`server process ${rootPid} was not present in the process table`);
   }
+
+  const footprint = await execFileAsync(
+    "/usr/bin/footprint",
+    ["-f", "bytes", "-t", String(rootPid)],
+    { maxBuffer: 64 * 1024 * 1024 },
+  );
   return {
-    rssKb: processes.reduce((sum, item) => sum + item.rssKb, 0),
+    physicalFootprintBytes: parsePhysicalFootprintBytes(footprint.stdout),
     processes,
   };
 }
@@ -81,19 +95,19 @@ function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function sampleProcessTreeRss(rootPid, options = {}) {
+async function sampleProcessTreePhysicalFootprint(rootPid, options = {}) {
   const { count = 5, intervalMs = 100 } = options;
-  const samplesKb = [];
+  const samplesBytes = [];
   let lastProcesses = [];
   for (let index = 0; index < count; index += 1) {
-    const sample = await readProcessTreeRss(rootPid);
-    samplesKb.push(sample.rssKb);
+    const sample = await readProcessTreePhysicalFootprint(rootPid);
+    samplesBytes.push(sample.physicalFootprintBytes);
     lastProcesses = sample.processes;
     if (index + 1 < count) await delay(intervalMs);
   }
   return {
-    samplesKb,
-    summaryKb: summarizeSamples(samplesKb),
+    samplesBytes,
+    summaryBytes: summarizeSamples(samplesBytes),
     processes: lastProcesses,
   };
 }
@@ -101,8 +115,9 @@ async function sampleProcessTreeRss(rootPid, options = {}) {
 module.exports = {
   delay,
   descendantsOf,
-  parsePsTable,
-  readProcessTreeRss,
-  sampleProcessTreeRss,
+  parsePhysicalFootprintBytes,
+  parseProcessTable,
+  readProcessTreePhysicalFootprint,
+  sampleProcessTreePhysicalFootprint,
   summarizeSamples,
 };

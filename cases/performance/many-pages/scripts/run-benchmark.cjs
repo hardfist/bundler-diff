@@ -11,7 +11,7 @@ const {
 } = require("./lib/fixture.cjs");
 const {
   delay,
-  sampleProcessTreeRss,
+  sampleProcessTreePhysicalFootprint,
   summarizeSamples,
 } = require("./lib/metrics.cjs");
 const { ensureTurbopackBinary, startServer } = require("./lib/server.cjs");
@@ -188,15 +188,14 @@ async function visitRoutes(page, routeCount, timeoutMs, bundler) {
   if (routeCount >= 20) process.stdout.write("\n");
 }
 
-function memoryPoint(sample) {
+function physicalFootprintPoint(sample) {
   return {
-    rssMiB: sample.summaryKb.median / 1024,
-    samplesMiB: sample.samplesKb.map((value) => value / 1024),
+    physicalFootprintMiB: sample.summaryBytes.median / (1024 * 1024),
+    samplesMiB: sample.samplesBytes.map((value) => value / (1024 * 1024)),
     processCount: sample.processes.length,
     processes: sample.processes.map((item) => ({
       pid: item.pid,
       parentPid: item.parentPid,
-      rssMiB: item.rssKb / 1024,
       command: item.command,
     })),
   };
@@ -227,7 +226,7 @@ async function measureMemory(options) {
   return withServer(options, async ({ page, server }) => {
     await navigateRoute(page, 1, options.routeTimeoutMs);
     await delay(options.settleMs);
-    const afterOneSample = await sampleProcessTreeRss(server.child.pid);
+    const afterOneSample = await sampleProcessTreePhysicalFootprint(server.child.pid);
 
     if (options.routeCount > 1) {
       for (let route = 2; route <= options.routeCount; route += 1) {
@@ -244,18 +243,22 @@ async function measureMemory(options) {
       await navigateRoute(page, 1, options.routeTimeoutMs, true);
     }
     await delay(options.settleMs);
-    const afterAllSample = await sampleProcessTreeRss(server.child.pid);
-    const afterOne = memoryPoint(afterOneSample);
-    const afterAll = memoryPoint(afterAllSample);
+    const afterAllSample = await sampleProcessTreePhysicalFootprint(server.child.pid);
+    const afterOne = physicalFootprintPoint(afterOneSample);
+    const afterAll = physicalFootprintPoint(afterAllSample);
     return {
+      metric: "physical-footprint",
+      unit: "MiB",
       afterOne,
       afterAll,
       activeRoute: 1,
-      deltaMiB: afterAll.rssMiB - afterOne.rssMiB,
+      deltaMiB: afterAll.physicalFootprintMiB - afterOne.physicalFootprintMiB,
       deltaPercent:
-        afterOne.rssMiB === 0
+        afterOne.physicalFootprintMiB === 0
           ? null
-          : ((afterAll.rssMiB - afterOne.rssMiB) / afterOne.rssMiB) * 100,
+          : ((afterAll.physicalFootprintMiB - afterOne.physicalFootprintMiB) /
+              afterOne.physicalFootprintMiB) *
+            100,
     };
   });
 }
@@ -331,7 +334,7 @@ async function benchmarkBundler(options) {
   console.log(`\n${options.bundler}`);
   const result = {};
   if (options.measureMemory) {
-    console.log("  measuring process-tree RSS after 1 and all routes...");
+    console.log("  measuring process-tree Physical footprint after 1 and all routes...");
     result.memory = await measureMemory(options);
   }
   if (options.measureHmr) {
@@ -357,15 +360,15 @@ function formatNumber(value, digits = 1) {
 function printSummary(results, routeCount) {
   console.log("\nSummary");
   console.log(
-    "bundler    RSS@1 MiB  RSS@all MiB  RSS delta MiB  RSS delta %  HMR@1 ms  HMR@all ms  HMR delta ms  HMR delta %",
+    "bundler    Footprint@1 MiB  Footprint@all MiB  PF delta MiB  PF delta %  HMR@1 ms  HMR@all ms  HMR delta ms  HMR delta %",
   );
   for (const [bundler, result] of Object.entries(results)) {
     console.log(
       [
         bundler.padEnd(10),
-        formatNumber(result.memory?.afterOne.rssMiB).padStart(9),
-        formatNumber(result.memory?.afterAll.rssMiB).padStart(12),
-        formatNumber(result.memory?.deltaMiB).padStart(13),
+        formatNumber(result.memory?.afterOne.physicalFootprintMiB).padStart(15),
+        formatNumber(result.memory?.afterAll.physicalFootprintMiB).padStart(17),
+        formatNumber(result.memory?.deltaMiB).padStart(12),
         formatNumber(result.memory?.deltaPercent).padStart(11),
         formatNumber(result.hmrAfterOne?.summaryMs.median).padStart(8),
         formatNumber(result.hmrAfterAll?.summaryMs.median).padStart(10),
@@ -374,7 +377,9 @@ function printSummary(results, routeCount) {
       ].join("  "),
     );
   }
-  console.log(`RSS@all and HMR@all are measured after ${routeCount} cumulative route visits.`);
+  console.log(
+    `Footprint@all and HMR@all are measured after ${routeCount} cumulative route visits.`,
+  );
 }
 
 async function main() {
@@ -429,7 +434,7 @@ async function main() {
     ? path.resolve(options.output)
     : path.join(caseDir, "results/latest.json");
   const document = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     repositoryCommit: gitOutput(["rev-parse", "HEAD"]),
     turbopackCommit: gitOutput(["rev-parse", "HEAD"], path.join(repoRoot, "third_party/turbopack")),
