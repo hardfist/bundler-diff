@@ -69,7 +69,28 @@ test("generateFixture creates isolated route graphs and benchmark metadata", (t)
   );
 });
 
-test("generateFixture defaults to 1500 leaf modules per route", (t) => {
+test("generateFixture defaults to 10 routes", (t) => {
+  const parentDir = fs.mkdtempSync(path.join(os.tmpdir(), "many-pages-routes-default-"));
+  const outputDir = path.join(parentDir, "generated");
+  t.after(() => fs.rmSync(parentDir, { recursive: true, force: true }));
+
+  const metadata = generateFixture({
+    outputDir,
+    modulesPerRoute: 1,
+    payloadItems: 1,
+  });
+
+  assert.equal(metadata.routeCount, 10);
+  assert.equal(metadata.routeLocalModules, 20);
+  assert.equal(metadata.totalModules, 22);
+  assert.ok(fs.existsSync(path.join(outputDir, "src/pages/route-010/page.js")));
+  assert.match(
+    fs.readFileSync(path.join(outputDir, "public/index.html"), "utf8"),
+    /<title>10 mostly-isolated routes benchmark<\/title>/,
+  );
+});
+
+test("generateFixture defaults to 9000 leaf modules per route", (t) => {
   const parentDir = fs.mkdtempSync(path.join(os.tmpdir(), "many-pages-default-"));
   const outputDir = path.join(parentDir, "generated");
   t.after(() => fs.rmSync(parentDir, { recursive: true, force: true }));
@@ -80,10 +101,10 @@ test("generateFixture defaults to 1500 leaf modules per route", (t) => {
     payloadItems: 1,
   });
 
-  assert.equal(metadata.modulesPerRoute, 1500);
-  assert.equal(metadata.routeLocalModules, 1501);
-  assert.equal(metadata.totalModules, 1503);
-  assert.ok(fs.existsSync(path.join(outputDir, "src/pages/route-001/module-1500.js")));
+  assert.equal(metadata.modulesPerRoute, 9000);
+  assert.equal(metadata.routeLocalModules, 9001);
+  assert.equal(metadata.totalModules, 9003);
+  assert.ok(fs.existsSync(path.join(outputDir, "src/pages/route-001/module-9000.js")));
 });
 
 test("generateFixture rejects invalid dimensions", () => {

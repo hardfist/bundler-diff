@@ -2,8 +2,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const DEFAULT_FIXTURE_OPTIONS = Object.freeze({
-  routeCount: 100,
-  modulesPerRoute: 1500,
+  routeCount: 10,
+  modulesPerRoute: 9000,
   payloadItems: 12,
 });
 
@@ -153,13 +153,13 @@ export const routeName = "${name}";
 `;
 }
 
-function createIndexHtml() {
+function createIndexHtml(routeCount) {
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>100 mostly-isolated routes benchmark</title>
+    <title>${routeCount} mostly-isolated routes benchmark</title>
   </head>
   <body>
     <main id="app"></main>
@@ -189,7 +189,7 @@ function generateFixture(options) {
 
   writeFile(path.join(outputDir, "src/index.js"), createIndexSource(routeCount));
   writeFile(path.join(outputDir, "src/routes.js"), createRoutesSource(routeCount));
-  writeFile(path.join(outputDir, "public/index.html"), createIndexHtml());
+  writeFile(path.join(outputDir, "public/index.html"), createIndexHtml(routeCount));
 
   for (let route = 1; route <= routeCount; route += 1) {
     const routeDir = path.join(outputDir, "src/pages", routeName(route));
