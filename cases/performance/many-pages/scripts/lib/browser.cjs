@@ -130,8 +130,12 @@ class BrowserPage {
     await this.connection.send("Network.setCacheDisabled", { cacheDisabled: true });
   }
 
-  async navigate(url) {
-    await this.connection.send("Page.navigate", { url });
+  async navigate(url, options = {}) {
+    await this.connection.send(
+      "Page.navigate",
+      { url },
+      options.timeoutMs || 30000,
+    );
   }
 
   async evaluate(expression, options = {}) {

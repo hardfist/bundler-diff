@@ -15,7 +15,11 @@ const {
   sampleProcessTreePhysicalFootprint,
   summarizeSamples,
 } = require("./lib/metrics.cjs");
-const { ensureTurbopackBinary, startServer } = require("./lib/server.cjs");
+const {
+  ensureTurbopackBinary,
+  startServer,
+  validateTurbopackCacheOptions,
+} = require("./lib/server.cjs");
 
 const caseDir = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(caseDir, "../../..");
@@ -50,6 +54,10 @@ Options:
   --route-timeout-ms=60000
   --turbopack-binary=/absolute/path/to/turbopack-cli
   --turbopack-profile=release|debug
+  --turbopack-persistent-cache=off|on
+  --turbopack-memory-eviction=off|full
+  --turbopack-snapshot-idle-ms=10000
+  --turbopack-snapshot-timeout-ms=300000
   --output=/absolute/path/to/results.json
   --skip-memory
   --skip-hmr
@@ -70,6 +78,13 @@ function nonNegativeInteger(name, value) {
     throw new Error(`${name} must be a non-negative integer, received ${value}`);
   }
   return parsed;
+}
+
+function enumValue(name, value, allowed) {
+  if (!allowed.includes(value)) {
+    throw new Error(`${name} must be one of ${allowed.join(", ")}, received ${value}`);
+  }
+  return value;
 }
 
 function parseOptions(argv) {
@@ -98,6 +113,22 @@ function parseOptions(argv) {
     throw new Error(`bundlers must be a subset of ${allBundlers.join(", ")}`);
   }
 
+  const turbopackPersistentCache =
+    enumValue(
+      "turbopack-persistent-cache",
+      values.get("turbopack-persistent-cache") || "off",
+      ["off", "on"],
+    ) === "on";
+  const turbopackMemoryEviction = enumValue(
+    "turbopack-memory-eviction",
+    values.get("turbopack-memory-eviction") || "off",
+    ["off", "full"],
+  );
+  validateTurbopackCacheOptions(
+    turbopackPersistentCache,
+    turbopackMemoryEviction,
+  );
+
   return {
     help: flags.has("help"),
     bundlers,
@@ -122,6 +153,16 @@ function parseOptions(argv) {
     ),
     turbopackBinary: values.get("turbopack-binary") || process.env.TURBOPACK_CLI,
     turbopackProfile: values.get("turbopack-profile") || "release",
+    turbopackPersistentCache,
+    turbopackMemoryEviction,
+    turbopackSnapshotIdleMs: nonNegativeInteger(
+      "turbopack-snapshot-idle-ms",
+      values.get("turbopack-snapshot-idle-ms") || 10000,
+    ),
+    turbopackSnapshotTimeoutMs: positiveInteger(
+      "turbopack-snapshot-timeout-ms",
+      values.get("turbopack-snapshot-timeout-ms") || 300000,
+    ),
     output: values.get("output"),
     measureMemory: !flags.has("skip-memory"),
     measureHmr: !flags.has("skip-hmr"),
@@ -150,7 +191,7 @@ async function openBenchmarkPage(browser, bundler, serverUrl, timeoutMs) {
   const page = await browser.newPage();
   const entryUrl = bundler === "turbopack" ? `${serverUrl}/` : `${serverUrl}/index.html`;
   try {
-    await page.navigate(entryUrl);
+    await page.navigate(entryUrl, { timeoutMs });
     await page.waitFor("globalThis.__BENCH_READY__ === true", {
       timeoutMs,
       description: `${bundler} benchmark entry to become ready`,
@@ -165,7 +206,7 @@ async function openBenchmarkPage(browser, bundler, serverUrl, timeoutMs) {
 
 async function navigateRoute(page, route, timeoutMs, reloadEntry = false) {
   if (reloadEntry) {
-    await page.navigate(page.benchmarkEntryUrl);
+    await page.navigate(page.benchmarkEntryUrl, { timeoutMs });
     await page.waitFor("globalThis.__BENCH_READY__ === true", {
       timeoutMs,
       description: "benchmark entry to reload",
@@ -215,6 +256,13 @@ async function withServer(options, run) {
       server.url,
       options.routeTimeoutMs,
     );
+    // No-op for servers without a persistent Turbopack cache. Otherwise drain
+    // the entry graph's initial snapshot so measured route states require a
+    // new completion marker caused by their own work.
+    await server.waitForTurbopackSnapshotCompletion(
+      options.turbopackSnapshotTimeoutMs,
+    );
+    server.resetTurbopackSnapshotCompletion();
     return await run({ page, server });
   } finally {
     await page?.close().catch(() => {});
@@ -226,8 +274,12 @@ async function withServer(options, run) {
 async function measureMemory(options) {
   return withServer(options, async ({ page, server }) => {
     await navigateRoute(page, 1, options.routeTimeoutMs);
+    await server.waitForTurbopackSnapshotCompletion(
+      options.turbopackSnapshotTimeoutMs,
+    );
     await delay(options.settleMs);
     const afterOneSample = await sampleProcessTreePhysicalFootprint(server.child.pid);
+    server.resetTurbopackSnapshotCompletion();
 
     if (options.routeCount > 1) {
       for (let route = 2; route <= options.routeCount; route += 1) {
@@ -241,8 +293,17 @@ async function measureMemory(options) {
       if (options.routeCount >= 20) process.stdout.write("\n");
       // Hold the active route constant across both memory points. This makes
       // compiled-route history, rather than the current page, the variable.
+      if (server.hasTurbopackSnapshotCompletion()) {
+        throw new Error(
+          "Turbopack snapshotted before route traversal finished; increase turbopack-snapshot-idle-ms",
+        );
+      }
+      server.resetTurbopackSnapshotCompletion();
       await navigateRoute(page, 1, options.routeTimeoutMs, true);
     }
+    await server.waitForTurbopackSnapshotCompletion(
+      options.turbopackSnapshotTimeoutMs,
+    );
     await delay(options.settleMs);
     const afterAllSample = await sampleProcessTreePhysicalFootprint(server.child.pid);
     const afterOne = physicalFootprintPoint(afterOneSample);
@@ -454,6 +515,10 @@ async function main() {
       hmrWarmup: options.hmrWarmup,
       settleMs: options.settleMs,
       routeTimeoutMs: options.routeTimeoutMs,
+      turbopackPersistentCache: options.turbopackPersistentCache,
+      turbopackMemoryEviction: options.turbopackMemoryEviction,
+      turbopackSnapshotIdleMs: options.turbopackSnapshotIdleMs,
+      turbopackSnapshotTimeoutMs: options.turbopackSnapshotTimeoutMs,
       measureMemory: options.measureMemory,
       measureHmr: options.measureHmr,
     },
