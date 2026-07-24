@@ -1,11 +1,22 @@
 const path = require("node:path");
-const { configDependencies, createConfigs } = require("./shared-config.cjs");
 
-module.exports = createConfigs("webpack", () => ({
-  type: "filesystem",
-  cacheDirectory: path.resolve(__dirname, ".webpack-cache"),
-  buildDependencies: {
-    config: [__filename, ...configDependencies],
+module.exports = ["client", "server"].map((name) => ({
+  name,
+  mode: "development",
+  target: "node",
+  context: __dirname,
+  entry: "./src/entry.js",
+  output: {
+    path: path.resolve(__dirname, "dist", "webpack", name),
+    filename: "entry.js",
+    clean: true,
   },
-  idleTimeoutForInitialStore: 0,
+  cache: {
+    type: "filesystem",
+    cacheDirectory: path.resolve(__dirname, ".webpack-cache"),
+    buildDependencies: {
+      config: [__filename],
+    },
+    idleTimeoutForInitialStore: 0,
+  },
 }));

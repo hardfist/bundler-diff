@@ -1,12 +1,23 @@
 const path = require("node:path");
-const { configDependencies, createConfigs } = require("./shared-config.cjs");
 
-module.exports = createConfigs("rspack", () => ({
-  type: "persistent",
-  buildDependencies: [__filename, ...configDependencies],
-  version: "persistent-cache-multi-compiler",
-  storage: {
-    type: "filesystem",
-    directory: path.resolve(__dirname, ".rspack-cache"),
+module.exports = ["client", "server"].map((name) => ({
+  name,
+  mode: "development",
+  target: "node",
+  context: __dirname,
+  entry: "./src/entry.js",
+  output: {
+    path: path.resolve(__dirname, "dist", "rspack", name),
+    filename: "entry.js",
+    clean: true,
+  },
+  cache: {
+    type: "persistent",
+    buildDependencies: [__filename],
+    version: "persistent-cache-multi-compiler",
+    storage: {
+      type: "filesystem",
+      directory: path.resolve(__dirname, ".rspack-cache"),
+    },
   },
 }));

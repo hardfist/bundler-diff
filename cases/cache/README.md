@@ -7,9 +7,8 @@ This directory contains cases for comparing cache behavior across bundlers.
 `persistent/` demonstrates filesystem-backed persistent cache behavior across
 Turbopack, webpack, and Rspack. It builds the same entry twice for each bundler,
 then verifies that cache files were written and that each built entry still
-runs. Its `multi-compiler/` subcase additionally compares how webpack and Rspack
-isolate two child compilers in one persistent cache root and how their warm
-build stats represent restored modules.
+runs. Its `multi-compiler/` subcase compares how webpack and Rspack isolate two
+child compilers in one persistent cache root.
 
 ```sh
 pnpm --filter persistent-cache-case run test:persistent-cache
