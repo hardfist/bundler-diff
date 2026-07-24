@@ -1,4 +1,5 @@
 use std::{
+    net::IpAddr,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -13,6 +14,7 @@ use turbopack_core::issue::IssueSeverity;
 #[clap(author, version, about, long_about = None)]
 pub enum Arguments {
     Build(BuildArguments),
+    Dev(DevArguments),
 }
 
 impl Arguments {
@@ -20,6 +22,7 @@ impl Arguments {
     pub fn dir(&self) -> Option<&Path> {
         match self {
             Arguments::Build(args) => args.common.dir.as_deref(),
+            Arguments::Dev(args) => args.common.dir.as_deref(),
         }
     }
 
@@ -27,6 +30,7 @@ impl Arguments {
     pub fn worker_threads(&self) -> Option<usize> {
         match self {
             Arguments::Build(args) => args.common.worker_threads,
+            Arguments::Dev(args) => args.common.worker_threads,
         }
     }
 }
@@ -95,6 +99,67 @@ pub struct CommonArguments {
     // pub memory_limit: Option<usize>,
 }
 
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+pub enum TurbopackMemoryEviction {
+    Off,
+    Full,
+}
+
+impl TurbopackMemoryEviction {
+    pub fn from_cli_and_env(cli_value: Option<Self>, raw_env: Option<&str>) -> Self {
+        if let Some(cli_value) = cli_value {
+            return cli_value;
+        }
+
+        match raw_env {
+            None | Some("1") | Some("true") => Self::Full,
+            _ => Self::Off,
+        }
+    }
+
+    pub fn evicts_after_snapshot(self) -> bool {
+        matches!(self, Self::Full)
+    }
+}
+
+#[derive(Debug, Args)]
+#[clap(author, version, about, long_about = None)]
+pub struct DevArguments {
+    #[clap(flatten)]
+    pub common: CommonArguments,
+
+    /// The port number on which to start the application.
+    #[clap(short, long, value_parser, default_value_t = 3000, env = "PORT")]
+    pub port: u16,
+
+    /// Hostname on which to start the application.
+    #[clap(short = 'H', long, value_parser, default_value = "0.0.0.0")]
+    pub hostname: IpAddr,
+
+    /// Compile all, instead of only compiling referenced assets when their
+    /// parent asset is requested.
+    #[clap(long)]
+    pub eager_compile: bool,
+
+    /// Don't open the browser automatically when the dev server has started.
+    #[clap(long)]
+    pub no_open: bool,
+
+    /// If port is not explicitly specified, use a different port if it is
+    /// already in use.
+    #[clap(long)]
+    pub allow_retry: bool,
+
+    /// Controls Turbopack memory eviction after persistent cache snapshots.
+    ///
+    /// `full` evicts evictable tasks after every snapshot; `off` disables
+    /// eviction. Defaults to `full`, matching Next.js, unless
+    /// `TURBO_ENGINE_EVICT_AFTER_SNAPSHOT` is set to a value other than `1` or
+    /// `true`.
+    #[clap(long, value_enum)]
+    pub turbopack_memory_eviction: Option<TurbopackMemoryEviction>,
+}
+
 #[derive(Debug, Args)]
 #[clap(author, version, about, long_about = None)]
 pub struct BuildArguments {
@@ -156,5 +221,74 @@ impl FromStr for IssueSeverityCliOption {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         <IssueSeverityCliOption as clap::ValueEnum>::from_str(s, true).map_err(|s| anyhow!("{}", s))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::{Arguments, TurbopackMemoryEviction};
+
+    #[test]
+    fn dev_accepts_explicit_memory_eviction_mode() {
+        let Arguments::Dev(args) = Arguments::try_parse_from([
+            "turbopack-cli",
+            "dev",
+            "--persistent-caching",
+            "--turbopack-memory-eviction",
+            "off",
+        ])
+        .unwrap() else {
+            panic!("expected dev arguments");
+        };
+
+        assert!(args.common.persistent_caching);
+        assert_eq!(
+            args.turbopack_memory_eviction,
+            Some(TurbopackMemoryEviction::Off)
+        );
+    }
+
+    #[test]
+    fn cli_memory_eviction_value_overrides_env() {
+        assert_eq!(
+            TurbopackMemoryEviction::from_cli_and_env(
+                Some(TurbopackMemoryEviction::Off),
+                Some("true"),
+            ),
+            TurbopackMemoryEviction::Off
+        );
+        assert_eq!(
+            TurbopackMemoryEviction::from_cli_and_env(
+                Some(TurbopackMemoryEviction::Full),
+                Some("0"),
+            ),
+            TurbopackMemoryEviction::Full
+        );
+    }
+
+    #[test]
+    fn memory_eviction_env_fallback_matches_next_config_normalization() {
+        assert_eq!(
+            TurbopackMemoryEviction::from_cli_and_env(None, None),
+            TurbopackMemoryEviction::Full
+        );
+        assert_eq!(
+            TurbopackMemoryEviction::from_cli_and_env(None, Some("1")),
+            TurbopackMemoryEviction::Full
+        );
+        assert_eq!(
+            TurbopackMemoryEviction::from_cli_and_env(None, Some("true")),
+            TurbopackMemoryEviction::Full
+        );
+        assert_eq!(
+            TurbopackMemoryEviction::from_cli_and_env(None, Some("0")),
+            TurbopackMemoryEviction::Off
+        );
+        assert_eq!(
+            TurbopackMemoryEviction::from_cli_and_env(None, Some("false")),
+            TurbopackMemoryEviction::Off
+        );
     }
 }

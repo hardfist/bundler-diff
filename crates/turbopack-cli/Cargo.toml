@@ -14,6 +14,13 @@ bench = false
 
 [features]
 default = ["custom_allocator"]
+profile = []
+serializable = []
+tokio_console = [
+  "dep:console-subscriber",
+  "tokio/tracing",
+  "turbo-tasks/tokio_tracing",
+]
 custom_allocator = ["turbo-tasks-malloc/custom_allocator"]
 
 [lints]
@@ -23,8 +30,11 @@ workspace = true
 anyhow = { workspace = true }
 bincode = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
+console-subscriber = { workspace = true, optional = true }
 dunce = { workspace = true }
 either = { workspace = true }
+futures = { workspace = true }
+owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
 serde_json = { workspace = true }
 swc_core = { workspace = true }
@@ -34,6 +44,7 @@ tracing-subscriber = { workspace = true, features = ["json"] }
 turbo-rcstr = { workspace = true }
 turbo-tasks = { workspace = true }
 turbo-tasks-backend = { workspace = true }
+turbo-tasks-env = { workspace = true }
 turbo-tasks-fs = { workspace = true }
 turbo-tasks-malloc = { workspace = true, default-features = false }
 turbo-unix-path = { workspace = true }
@@ -42,6 +53,7 @@ turbopack-browser = { workspace = true }
 turbopack-cli-utils = { workspace = true }
 turbopack-core = { workspace = true }
 turbopack-css = { workspace = true }
+turbopack-dev-server = { workspace = true }
 turbopack-ecmascript = { workspace = true }
 turbopack-ecmascript-runtime = { workspace = true }
 turbopack-env = { workspace = true }
@@ -49,6 +61,7 @@ turbopack-node = { workspace = true, default-features = false, features = ["proc
 turbopack-nodejs = { workspace = true }
 turbopack-resolve = { workspace = true }
 turbopack-trace-utils = { workspace = true }
+webbrowser = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }

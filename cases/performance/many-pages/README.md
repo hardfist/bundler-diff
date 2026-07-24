@@ -13,7 +13,7 @@ pnpm install
 pnpm --dir cases/performance/many-pages benchmark
 ```
 
-第一次运行会以 release 模式编译 `third_party/turbopack` 中锁定提交的上游 `turbopack-cli`，耗时会明显长于后续运行。也可以通过 `--turbopack-binary=/absolute/path` 使用另一个支持 `dev` 子命令的二进制。
+第一次运行会以 release 模式编译 `crates/turbopack-cli` 中的本地 wrapper；它使用 `third_party/turbopack` 中锁定的上游实现，并额外暴露 benchmark 所需的 dev persistent-cache 和 memory-eviction 开关。首次编译耗时会明显长于后续运行。也可以通过 `--turbopack-binary=/absolute/path` 使用另一个兼容这些参数的二进制。
 
 仅做链路冒烟测试时使用：
 
@@ -38,11 +38,44 @@ pnpm --dir cases/performance/many-pages benchmark -- \
 
 完整参数见 `pnpm --dir cases/performance/many-pages benchmark -- --help`。结果会打印到终端，并写入 `results/latest.json`；生成的 fixture 位于 `.generated/`，两者均不提交。
 
+### Turbopack memory eviction
+
+默认的三 bundler 对比仍关闭 Turbopack persistent cache。要隔离测试 `memory_eviction`，需要让 off/full 两轮都启用 persistent cache，只改变 eviction 模式：
+
+```sh
+pnpm --dir cases/performance/many-pages benchmark -- \
+  --bundlers=turbopack \
+  --skip-hmr \
+  --turbopack-persistent-cache=on \
+  --turbopack-memory-eviction=off \
+  --turbopack-snapshot-idle-ms=10000 \
+  --turbopack-snapshot-timeout-ms=300000
+
+pnpm --dir cases/performance/many-pages benchmark -- \
+  --bundlers=turbopack \
+  --skip-hmr \
+  --turbopack-persistent-cache=on \
+  --turbopack-memory-eviction=full \
+  --turbopack-snapshot-idle-ms=10000 \
+  --turbopack-snapshot-timeout-ms=300000
+```
+
+每个 dev server 使用全新的临时 cache 目录，退出后自动删除。`turbopack-snapshot-idle-ms` 控制空闲多久后开始 snapshot，默认 10 秒以覆盖连续路由访问之间的短暂空闲；如果 route 2–10 尚未访问完就出现 marker，benchmark 会直接失败并要求增大该值。本地 CLI 在完整 background-snapshot span 关闭后写 completion marker；benchmark 只会在测量侧保持 idle 且没有出现 persistence、compaction 或 marker 写入错误时接受它。benchmark 先消费入口图的初始 marker，再为每个待测路由状态等待一个由该状态触发的新 marker，之后才会采样。`turbopack-snapshot-timeout-ms` 只控制等待这个明确信号的超时时间。
+
+在 2026-07-24 的同机 10×9000 release 测试中：
+
+| Persistent cache | Memory eviction | Footprint@1 | Footprint@10 | 路由增长 |
+| --- | --- | ---: | ---: | ---: |
+| on | off | 5677.7 MiB | 5947.8 MiB | +270.0 MiB |
+| on | full | 1030.8 MiB | 1351.1 MiB | +320.3 MiB |
+
+相同 persistent-cache 条件下，full eviction 分别降低 `Footprint@1` 4647.0 MiB（81.8%）和 `Footprint@10` 4596.7 MiB（77.3%）。full 模式的多路由增量略高，但它从显著更低的 snapshot 后基线开始。
+
 ## 测量口径
 
 ### 内存
 
-每个 bundler 从无持久缓存的干净 dev-server 进程启动：
+默认对比中，每个 bundler 从无持久缓存的干净 dev-server 进程启动：
 
 两者都启用单代内存 cache：webpack 显式配置 `cache.type = "memory"` 和 `maxGenerations = 1`，Rspack 使用 `cache: true` 对应的开发模式 memory cache（内部 `max_generations = 1`）。cache 只存在于本次 dev-server 进程，不写入持久缓存目录。
 
@@ -53,6 +86,8 @@ pnpm --dir cases/performance/many-pages benchmark -- \
 webpack 5 的默认 lazy-compilation backend 会在客户端断开后继续保留模块 120 秒，而且这个延迟没有公开配置项。该窗口会让快速访问过的所有路由同时留在最终 compilation，无法与 Rspack 每次 compilation 消费并清空 active set 的行为对齐。因此本 case 为 webpack 使用等价的自定义 backend，将断开后的 deactivation delay 设为 `0`；这只改变 lazy module 的失活时机，不改变路由、模块量或缓存配置。
 
 `footprint -t` 会包含 dev server 的所有后代进程，并对进程间共享映射去重；多进程场景读取其 `Summary Footprint`，而不是把各进程指标简单相加。Chrome 不属于 dev-server 进程树，因此不计入结果。Physical footprint 采样仅支持 macOS。
+
+启用 Turbopack persistent cache 时，每个采样点都会等待 CLI 的 snapshot completion marker。memory eviction 只在 snapshot 持久化完成后执行，不是基于 RSS 或内存压力触发的通用 GC。
 
 ### HMR
 

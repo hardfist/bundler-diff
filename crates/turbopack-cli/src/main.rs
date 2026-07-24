@@ -1,9 +1,19 @@
-use std::{cell::RefCell, path::Path, time::Instant};
+use std::{
+    cell::RefCell,
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use runtime_turbopack_cli::arguments::Arguments;
-use tracing_subscriber::{Registry, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing::{Id, Subscriber};
+use tracing_subscriber::{
+    Registry,
+    layer::{Context as LayerContext, Layer, SubscriberExt},
+    registry::LookupSpan,
+    util::SubscriberInitExt,
+};
 use turbo_tasks::parallel::available_parallelism;
 use turbo_tasks_malloc::TurboMalloc;
 use turbopack_trace_utils::{
@@ -18,6 +28,29 @@ use turbopack_trace_utils::{
 
 #[global_allocator]
 static ALLOC: TurboMalloc = TurboMalloc;
+
+struct SnapshotCompletionLayer {
+    path: PathBuf,
+}
+
+impl<S> Layer<S> for SnapshotCompletionLayer
+where
+    S: Subscriber + for<'lookup> LookupSpan<'lookup>,
+{
+    fn on_close(&self, id: Id, context: LayerContext<'_, S>) {
+        let Some(span) = context.span(&id) else {
+            return;
+        };
+        if span.metadata().name() == "background snapshot"
+            && let Err(error) = std::fs::write(&self.path, b"complete\n")
+        {
+            eprintln!(
+                "Unable to write Turbopack snapshot completion marker {}: {error}",
+                self.path.display()
+            );
+        }
+    }
+}
 
 fn main() {
     thread_local! {
@@ -67,6 +100,8 @@ async fn main_inner(args: Arguments) -> Result<()> {
     let exit_handler = ExitHandler::listen();
 
     let trace = std::env::var("TURBOPACK_TRACING").ok();
+    let snapshot_completion_file =
+        std::env::var_os("TURBO_ENGINE_SNAPSHOT_COMPLETION_FILE").map(PathBuf::from);
     if let Some(mut trace) = trace.filter(|v| !v.is_empty()) {
         // Trace presets
         match trace.as_str() {
@@ -82,7 +117,8 @@ async fn main_inner(args: Arguments) -> Result<()> {
             _ => {}
         }
 
-        let subscriber = Registry::default();
+        let subscriber = Registry::default()
+            .with(snapshot_completion_file.map(|path| SnapshotCompletionLayer { path }));
 
         let subscriber = subscriber.with(FilterLayer::try_new(&trace).unwrap());
 
@@ -102,9 +138,14 @@ async fn main_inner(args: Arguments) -> Result<()> {
             .on_exit(async move { tokio::task::spawn_blocking(|| drop(guard)).await.unwrap() });
 
         subscriber.init();
+    } else if let Some(path) = snapshot_completion_file {
+        Registry::default()
+            .with(SnapshotCompletionLayer { path })
+            .init();
     }
 
     match args {
         Arguments::Build(args) => runtime_turbopack_cli::build::build(&args).await,
+        Arguments::Dev(args) => runtime_turbopack_cli::dev::start_server(&args).await,
     }
 }
