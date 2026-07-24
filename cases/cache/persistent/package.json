@@ -3,13 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build:all": "pnpm run test:persistent-cache",
+    "build:all": "pnpm run test:persistent-cache && pnpm run test:multi-compiler-cache",
     "build:rspack": "rspack build --config rspack.config.cjs",
     "build:turbopack": "TURBO_ENGINE_IGNORE_DIRTY=1 cargo run --manifest-path ../../../crates/turbopack-cli/Cargo.toml -- build --dir . --root . --target node --no-minify --no-sourcemap --persistent-caching --cache-dir .turbopack/persistent-cache src/entry.js",
     "build:webpack": "webpack --config webpack.config.cjs",
     "start:rspack": "node dist/rspack/entry.js",
     "start:turbopack": "node dist/entry.entry.js",
     "start:webpack": "node dist/webpack/entry.js",
+    "test:multi-compiler-cache": "node multi-compiler/scripts/compare-multi-compiler-cache.cjs",
     "test:persistent-cache": "node scripts/expect-persistent-cache.cjs"
   },
   "devDependencies": {

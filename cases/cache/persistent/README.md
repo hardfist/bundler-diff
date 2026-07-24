@@ -16,3 +16,14 @@ files were created, and executes each generated Node entry.
 ```sh
 pnpm run test:persistent-cache
 ```
+
+## Multi Compiler Subcase
+
+`multi-compiler/` exports two named child compiler configs for webpack and
+Rspack. Its test script runs each config twice, executes both outputs, and
+compares the cache directories: webpack uses named `__compilerN__` directories,
+while Rspack uses configuration-hash directories in one shared storage root.
+
+```sh
+pnpm run test:multi-compiler-cache
+```
