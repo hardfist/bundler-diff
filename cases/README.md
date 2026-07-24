@@ -14,3 +14,9 @@ code, loader behavior, asset handling, and observable output.
 
 Each case should keep its source, bundler configuration, generated output, and
 verification scripts together so differences are easy to reproduce and compare.
+
+## Performance
+
+`performance/` contains repeatable development-server benchmarks. These cases
+measure process memory and end-to-end browser-visible update latency rather than
+production bundle output.

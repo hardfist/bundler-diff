@@ -1,3 +1,4 @@
 packages:
   - "cases/cache/*"
+  - "cases/performance/*"
   - "cases/runtime/*"
